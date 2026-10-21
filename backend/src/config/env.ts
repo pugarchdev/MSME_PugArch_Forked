@@ -169,7 +169,18 @@ const envSchema = z.object({
   DIGILOCKER_SERVICE_NAME: withFallback(['MERIPEHCHAAN_SERVICE_NAME'], z.string().trim().max(50).default('JsgSmile MSME Portal')),
   DIGILOCKER_PURPOSE_ONBOARDING: withFallback(['MERIPEHCHAAN_PURPOSE_ONBOARDING'], z.string().trim().max(50).default('User Onboarding KYC Verification')),
   DIGILOCKER_PURPOSE_PREREG: withFallback(['MERIPEHCHAAN_PURPOSE_PREREG'], z.string().trim().max(50).default('Pre Registration KYC Verification')),
-  AADHAAR_KYC_SESSION_TTL_MINUTES: z.coerce.number().int().min(1).max(1440).default(60)
+  AADHAAR_KYC_SESSION_TTL_MINUTES: z.coerce.number().int().min(1).max(1440).default(60),
+
+  // AI & Document Extraction Configuration
+  GEMINI_API_KEY: optionalString(),
+  NVIDIA_API_KEY: optionalString(),
+  NVIDIA_NIM_API_KEY: optionalString(),
+  AI_PROVIDER_PRIORITY: z.string().default('gemini,nvidia'),
+  AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
+  GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
+  GEMINI_BASE_URL: z.string().url().default('https://generativelanguage.googleapis.com/v1beta'),
+  NVIDIA_MODEL: z.string().default('meta/llama-3.2-11b-vision-instruct'),
+  NVIDIA_BASE_URL: z.string().url().default('https://integrate.api.nvidia.com/v1')
 });
 const parsed = envSchema.safeParse(process.env);
 
