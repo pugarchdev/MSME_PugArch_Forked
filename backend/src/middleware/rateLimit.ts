@@ -21,12 +21,42 @@ type MemoryBucket = {
 
 const memoryBuckets = new Map<string, MemoryBucket>();
 
-const clientIp = (req: Request) => normalizeSpaces(req.ip || req.socket.remoteAddress || 'unknown');
+export const clientIp = (req: Request): string => {
+  const cfIp = req.header('cf-connecting-ip');
+  if (cfIp) return normalizeSpaces(cfIp.split(',')[0]);
+  const forwarded = req.header('x-forwarded-for');
+  if (forwarded) return normalizeSpaces(forwarded.split(',')[0]);
+  const realIp = req.header('x-real-ip');
+  if (realIp) return normalizeSpaces(realIp);
+  return normalizeSpaces(req.ip || req.socket.remoteAddress || 'unknown');
+};
+
+const getNormalizedPath = (req: Request): string => {
+  const full = req.originalUrl || `${req.baseUrl || ''}${req.path || ''}` || req.url || '';
+  return full.split('?')[0];
+};
+
+const extractUserOrToken = (req: Request): string | null => {
+  if (req.user?.id) return String(req.user.id);
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.slice(7).trim();
+    if (token && token !== 'null' && token !== 'undefined') {
+      return `tok:${sha256(token).slice(0, 16)}`;
+    }
+  }
+  const cookieSession = (req as any).cookies?.['session_token'] || (req as any).cookies?.['auth_token'];
+  if (cookieSession) {
+    return `sess:${sha256(cookieSession).slice(0, 16)}`;
+  }
+  return null;
+};
 
 const defaultKeyGenerator = (req: Request) => {
-  const route = `${req.method}:${req.baseUrl || req.path}`;
-  return req.user?.id
-    ? redisKeys.rateApi(req.user.id, route)
+  const route = `${req.method}:${getNormalizedPath(req)}`;
+  const identifier = extractUserOrToken(req);
+  return identifier
+    ? redisKeys.rateApi(identifier, route)
     : redisKeys.rateApiIp(clientIp(req), route);
 };
 
@@ -54,6 +84,12 @@ const routeLimiter = (options: RateLimitOptions) => {
       return next();
     }
     const key = keyFor(req);
+    const path = getNormalizedPath(req);
+    const identifier = extractUserOrToken(req);
+    const isAdminRoute = path.startsWith('/api/admin') || path.startsWith('/api/master-admin');
+    const effectiveMax = (isAdminRoute || Boolean(identifier)) && options.name === 'api-general'
+      ? Math.max(options.max * 4, 1200)
+      : options.max;
 
     try {
       if (redis && isRedisReady()) {
@@ -61,12 +97,12 @@ const routeLimiter = (options: RateLimitOptions) => {
         if (count === 1) await redis.pexpire(key, options.windowMs);
         const ttl = Number(await redis.pttl(key));
 
-        res.setHeader('RateLimit-Limit', String(options.max));
-        res.setHeader('RateLimit-Remaining', String(Math.max(0, options.max - count)));
+        res.setHeader('RateLimit-Limit', String(effectiveMax));
+        res.setHeader('RateLimit-Remaining', String(Math.max(0, effectiveMax - count)));
         res.setHeader('RateLimit-Reset', String(Math.ceil(Math.max(ttl, 0) / 1000)));
 
-        if (count > options.max) {
-          logger.warn({ requestId: req.id, rateLimit: options.name, key }, 'Rate limit exceeded');
+        if (count > effectiveMax) {
+          logger.warn({ requestId: req.id, rateLimit: options.name, key, count, max: effectiveMax }, 'Rate limit exceeded');
           return apiResponse.error(res, 429, 'Too many requests. Please try again later.', 'RATE_LIMITED');
         }
 
@@ -88,7 +124,7 @@ const routeLimiter = (options: RateLimitOptions) => {
     }
 
     bucket.count += 1;
-    if (bucket.count > options.max) {
+    if (bucket.count > effectiveMax) {
       return apiResponse.error(res, 429, 'Too many requests. Please try again later.', 'RATE_LIMITED');
     }
 

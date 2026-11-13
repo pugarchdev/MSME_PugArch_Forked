@@ -796,7 +796,9 @@ export default function AdminOnboarding() {
       const res = await api.fetch("/api/admin/onboarding?pageSize=1000", { headers: authHeaders });
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson?.message || errJson?.error || `Failed to load onboarding records (${res.status})`);
+        const err = new Error(errJson?.message || errJson?.error || `Failed to load onboarding records (${res.status})`);
+        (err as any).status = res.status;
+        throw err;
       }
       const json = await res.json();
       return json?.data ?? json;
@@ -2469,7 +2471,11 @@ export default function AdminOnboarding() {
                     <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
                       {onboardingError instanceof Error ? onboardingError.message : 'Please check your connection and sign in status.'}
                     </p>
-                    <Button onClick={() => refetchOnboarding()} className="mt-4 bg-[#12335f] hover:bg-[#0b2445] text-white rounded-xl text-xs font-bold px-5">
+                    <Button
+                      onClick={() => refetchOnboarding()}
+                      loadingText="Retrying..."
+                      className="mt-4 bg-[#12335f] hover:bg-[#0b2445] text-white rounded-xl text-xs font-bold px-5"
+                    >
                       <RefreshCw className="h-3.5 w-3.5 mr-2" />
                       Retry Connection
                     </Button>

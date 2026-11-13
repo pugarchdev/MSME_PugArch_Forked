@@ -11,6 +11,45 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   showSpinner?: boolean;
 }
 
+const isSpinnerElement = (child: React.ReactNode): boolean => {
+  if (!React.isValidElement(child)) return false;
+  const className = String((child.props as any)?.className || '');
+  if (className.includes('animate-spin')) return true;
+  const type = child.type as any;
+  const typeName = type?.displayName || type?.name || '';
+  if (/loader|spinner/i.test(typeName)) return true;
+  return false;
+};
+
+const hasSpinnerChild = (nodes: React.ReactNode): boolean => {
+  let found = false;
+  React.Children.forEach(nodes, (child) => {
+    if (found) return;
+    if (isSpinnerElement(child)) {
+      found = true;
+      return;
+    }
+    if (React.isValidElement(child) && child.props && (child.props as any).children) {
+      if (hasSpinnerChild((child.props as any).children)) {
+        found = true;
+      }
+    }
+  });
+  return found;
+};
+
+const isIconElement = (child: React.ReactNode): boolean => {
+  if (!React.isValidElement(child)) return false;
+  if (isSpinnerElement(child)) return false;
+  const className = String((child.props as any)?.className || '');
+  if (typeof child.type === 'function' || typeof child.type === 'object') {
+    if (/\b(h-|w-|size-)\d+/.test(className) || (child.props as any)?.size || (child.props as any)?.strokeWidth) {
+      return true;
+    }
+  }
+  return false;
+};
+
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   (
     {
@@ -95,6 +134,62 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       }
     };
 
+    const renderBusyContent = () => {
+      if (loadingText !== undefined) {
+        return (
+          <>
+            {showSpinner && (
+              <Loader2 className="h-4 w-4 animate-spin text-current" forceGold={false} />
+            )}
+            <span className="sr-only">Processing, please wait...</span>
+            {loadingText}
+          </>
+        );
+      }
+
+      // If children already contains a spinner (e.g. {isLoading ? <Loader2 /> : <Icon />} pattern),
+      // avoid rendering a duplicate spinner
+      if (hasSpinnerChild(children)) {
+        return (
+          <>
+            <span className="sr-only">Processing, please wait...</span>
+            {children}
+          </>
+        );
+      }
+
+      if (!showSpinner) {
+        return (
+          <>
+            <span className="sr-only">Processing, please wait...</span>
+            {children}
+          </>
+        );
+      }
+
+      // If the first child is an icon (like <RefreshCw />, <Save />), replace it with the loader
+      // rather than rendering two icons side by side
+      const childArray = React.Children.toArray(children);
+      if (childArray.length > 0 && isIconElement(childArray[0])) {
+        const [, ...rest] = childArray;
+        return (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin text-current" forceGold={false} />
+            <span className="sr-only">Processing, please wait...</span>
+            {rest}
+          </>
+        );
+      }
+
+      return (
+        <>
+          <Loader2 className="h-4 w-4 animate-spin text-current" forceGold={false} />
+          <span className="sr-only">Processing, please wait...</span>
+          {children}
+        </>
+      );
+    };
+
     return (
       <button
         suppressHydrationWarning
@@ -113,17 +208,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         )}
         {...props}
       >
-        {isBusy ? (
-          <>
-            {showSpinner && (
-              <Loader2 className="h-4 w-4 animate-spin text-current" forceGold={false} />
-            )}
-            <span className="sr-only">Processing, please wait...</span>
-            {loadingText !== undefined ? loadingText : children}
-          </>
-        ) : (
-          children
-        )}
+        {isBusy ? renderBusyContent() : children}
       </button>
     );
   }
