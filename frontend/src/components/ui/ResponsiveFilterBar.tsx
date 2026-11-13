@@ -135,8 +135,8 @@ export function ResponsiveFilterBar({
           <div className={cn(
             "grid gap-2 sm:gap-2.5",
             gridColsClassName,
-            // If any nested wrapper div is still rendered, treat it as display: contents
-            "[&>div.flex]:!contents [&>div.flex-wrap]:!contents",
+            // Only unwrap outer non-col-spanning flex wrappers if any remain; preserve composite/col-spanning controls
+            "[&>div.flex:not([class*='col-span']):not([data-composite])]:!contents [&>div.flex-wrap:not([class*='col-span']):not([data-composite])]:!contents",
             // Sleek typography & compact sizing for all controls rendered inside
             "[&_select]:!text-xs [&_select]:!font-semibold [&_select]:!text-slate-700 [&_select]:!h-9 [&_select]:!px-2.5 [&_select]:!py-1.5 [&_select]:!rounded-xl [&_select]:!border [&_select]:!border-slate-200 [&_select]:!bg-white [&_select]:!shadow-2xs [&_select]:!w-full [&_select]:!min-w-0",
             "[&_label]:!text-[10px] [&_label]:!font-bold [&_label]:!uppercase [&_label]:!tracking-wider [&_label]:!text-slate-500 [&_label]:!mb-1 [&_label]:!block",

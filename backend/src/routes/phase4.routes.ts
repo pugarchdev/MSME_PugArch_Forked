@@ -30,7 +30,7 @@ import { notifySellerNewPurchaseOrder, generatePaymentReceiptPdfBuffer, notifyPa
 import { redisKeys } from '../constants/redis-keys.js';
 import { ApiError } from '../utils/ApiError.js';
 import { handleSecureRouteError } from '../utils/routeHelpers.js';
-import { maskSensitive, maskBankAccount } from '../utils/maskSensitive.js';
+import { maskSensitive, maskBankAccount, type MaskSensitiveOptions } from '../utils/maskSensitive.js';
 import { formatIstDateTime } from '../services/email-template.builder.js';
 import { sha256, createHashFingerprint, decryptField, isEncrypted } from '../utils/crypto.js';
 import { panVerificationService } from '../services/verification/pan.service.js';
@@ -128,7 +128,7 @@ const orgScope = {
 };
 const approvedProcurementStatuses = new Set(['approved_for_procurement', 'approved']);
 
-const ok = (res: Response, data: unknown, status = 200) => res.status(status).json(maskSensitive({ success: true, data }));
+const ok = (res: Response, data: unknown, status = 200, options?: MaskSensitiveOptions) => res.status(status).json(maskSensitive({ success: true, data }, options));
 
 const humanizeKey = (key: string) =>
   key
@@ -10032,6 +10032,7 @@ router.get('/purchase-orders', authenticate, asyncRoute(async (req, res) => {
             sellerProfile: true
           }
         },
+        tender: { select: { id: true, tenderId: true, title: true, category: true, status: true } },
         items: { include: { product: { select: { name: true, unitOfMeasure: true } } } },
         deliveryTrackings: { include: { events: { orderBy: { occurredAt: 'desc' }, take: 8 } } },
         invoices: { orderBy: { createdAt: 'desc' }, take: 5 },
@@ -10042,7 +10043,7 @@ router.get('/purchase-orders', authenticate, asyncRoute(async (req, res) => {
     }),
     db.purchaseOrder.count({ where })
   ]);
-  ok(res, paged(purchaseOrders.map(formatPoWithOrgAddress), total, query, 'purchaseOrders'));
+  ok(res, paged(purchaseOrders.map(formatPoWithOrgAddress), total, query, 'purchaseOrders'), 200, { unmaskForAdmin: true, unmaskSelf: true });
 }));
 
 router.get('/purchase-orders/:id', authenticate, asyncRoute(async (req, res) => {
@@ -10057,6 +10058,7 @@ router.get('/purchase-orders/:id', authenticate, asyncRoute(async (req, res) => 
       ]
     },
     include: {
+      tender: { select: { id: true, tenderId: true, title: true, category: true, status: true } },
       buyer: {
         select: {
           id: true,
@@ -10155,7 +10157,7 @@ router.get('/purchase-orders/:id', authenticate, asyncRoute(async (req, res) => 
   }
 
   if (!po || !isAllowed) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
-  ok(res, formatPoWithOrgAddress(po));
+  ok(res, formatPoWithOrgAddress(po), 200, { unmaskForAdmin: true, unmaskSelf: true });
 }));
 
 router.post('/purchase-orders/:id/acknowledge', authenticate, authorize('seller', 'admin', 'shg'), asyncRoute(async (req, res) => {
@@ -10392,7 +10394,7 @@ router.put('/purchase-orders/:id/draft', authenticate, authorize('buyer', 'admin
   });
 
   await auditWrite(req, 'purchase_order.draft_updated', 'purchaseOrder', id);
-  ok(res, updated);
+  ok(res, updated, 200, { unmaskEmails: true });
 }));
 
 router.post('/purchase-orders/:id/issue', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
@@ -10420,7 +10422,7 @@ router.post('/purchase-orders/:id/issue', authenticate, authorize('buyer', 'admi
 
   notifySellerNewPurchaseOrder(po.id).catch(() => undefined);
   await auditWrite(req, 'purchase_order.issued', 'purchaseOrder', id);
-  ok(res, updated);
+  ok(res, updated, 200, { unmaskEmails: true });
 }));
 
 router.post('/purchase-orders/:id/recall', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
@@ -10451,7 +10453,7 @@ router.post('/purchase-orders/:id/recall', authenticate, authorize('buyer', 'adm
   });
 
   await auditWrite(req, 'purchase_order.recalled_to_draft', 'purchaseOrder', id);
-  ok(res, updated);
+  ok(res, updated, 200, { unmaskEmails: true });
 }));
 
 router.post('/purchase-orders/:id/amend', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
@@ -10581,7 +10583,7 @@ router.post('/purchase-orders/:id/amend', authenticate, authorize('buyer', 'admi
     integrityChecksum: snapshot.integrityChecksum,
     proposedTotalValue
   });
-  ok(res, updated);
+  ok(res, updated, 200, { unmaskEmails: true });
 }));
 
 router.post('/purchase-orders/:id/amendment-decision', authenticate, authorize('seller', 'admin', 'shg'), asyncRoute(async (req, res) => {
@@ -10685,7 +10687,7 @@ router.post('/purchase-orders/:id/amendment-decision', authenticate, authorize('
   );
 
   await auditWrite(req, `purchase_order.amendment_${isAccepted ? 'accepted' : 'declined'}`, 'purchaseOrder', id, { ...body, remarks });
-  ok(res, updated);
+  ok(res, updated, 200, { unmaskEmails: true });
 }));
 
 

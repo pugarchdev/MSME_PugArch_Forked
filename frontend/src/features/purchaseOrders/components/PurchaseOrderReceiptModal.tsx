@@ -744,6 +744,33 @@ export function PurchaseOrderReceiptModal({
       return;
     }
 
+    // If buyer uploaded an authentic official PO PDF document, download that directly!
+    const attachedFileId = (order as any)?.externalPdfFileId || (order as any)?.pdfFileId;
+    if (attachedFileId) {
+      try {
+        setIsGeneratingPdf(true);
+        toast.loading('Downloading official buyer-uploaded PO...', { id: 'po-pdf-dl' });
+        const res = await api.fetch(`/api/purchase-orders/${order.id}/download-pdf`);
+        if (res.ok) {
+          const blob = await res.blob();
+          const downloadUrl = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = downloadUrl;
+          a.download = `${order.poNumber || `PO-${order.id}`}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          window.URL.revokeObjectURL(downloadUrl);
+          toast.success('Official Purchase Order PDF downloaded', { id: 'po-pdf-dl' });
+          return;
+        }
+      } catch (dlErr) {
+        console.warn('Failed to download uploaded PO PDF directly, falling back to generator', dlErr);
+      } finally {
+        setIsGeneratingPdf(false);
+      }
+    }
+
     try {
       setIsGeneratingPdf(true);
       toast.loading('Generating Purchase Order PDF...', { id: 'po-pdf-dl' });
@@ -1136,7 +1163,14 @@ export function PurchaseOrderReceiptModal({
                         <h2 className="text-base font-black text-slate-950 uppercase tracking-tight font-sans">
                           {topOrgName}
                         </h2>
-                        <p className="text-[10px] text-slate-500 font-medium">Official Purchase Order Document</p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <p className="text-[10px] text-slate-500 font-medium">Official Purchase Order Document</p>
+                          {Boolean((order as any)?.externalPdfFileId) && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                              Buyer Signed PO Attached
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="text-right">
@@ -1640,10 +1674,20 @@ export function PurchaseOrderReceiptModal({
                         </span>
                         <div className="flex flex-wrap gap-2">
                           {order.deliveryTrackings.map((dt: any) => (
-                            <div key={dt.id} className="inline-flex items-center gap-2 rounded-lg bg-slate-100 border border-slate-200 px-2.5 py-1">
+                            <button
+                              key={dt.id}
+                              type="button"
+                              onClick={() => {
+                                onClose();
+                                router.push(`/delivery/${dt.id}`);
+                              }}
+                              className="inline-flex items-center gap-2 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 px-2.5 py-1 cursor-pointer transition-colors"
+                              title="View delivery tracking details"
+                            >
                               <span className="font-mono text-xs font-bold text-slate-800">{dt.trackingNumber || `DLV-${dt.id}`}</span>
+                              <ExternalLink className="h-3 w-3 text-slate-400" />
                               <span className="text-[10px] font-bold text-slate-600 uppercase">({readableStatus(dt.status || 'pending')})</span>
-                            </div>
+                            </button>
                           ))}
                         </div>
                       </div>

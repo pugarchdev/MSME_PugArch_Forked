@@ -1,7 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { drawFitImage, loadImageAsDataUrl, moneyPdf, sanitizePdfText } from '../../../lib/pdfEngine';
-import { maskGSTIN, maskPAN } from '../../../lib/maskPii';
 
 export interface PurchaseOrderItemData {
   itemIndex: number;
@@ -176,7 +175,7 @@ export async function generateOfficialPurchaseOrderPdf(data: PurchaseOrderPdfDat
   // 2. TABLE 1: VENDOR & PO INFO (4-Column Enterprise Grid)
   // ─────────────────────────────────────────────────────────────
   const sellerPhoneEmail = [data.seller.phone, data.seller.email].filter(Boolean).join(' | ');
-  const sellerTax = `GSTIN: ${maskGSTIN(data.seller.gstin)} | PAN: ${maskPAN(data.seller.pan)}`;
+  const sellerTax = `GSTIN: ${data.seller.gstin || 'N/A'}${data.seller.pan ? ` | PAN: ${data.seller.pan}` : ''}`;
 
   autoTable(doc, {
     startY: currentY,
@@ -249,7 +248,7 @@ export async function generateOfficialPurchaseOrderPdf(data: PurchaseOrderPdfDat
       ],
       [
         { content: 'Buyer GSTIN:', styles: { fontStyle: 'bold', fillColor: [248, 250, 252] } },
-        { content: maskGSTIN(data.buyer.gstin) || 'N/A' },
+        { content: data.buyer.gstin || 'N/A' },
         { content: 'Due Date:', styles: { fontStyle: 'bold', fillColor: [248, 250, 252] } },
         { content: data.dueDate || 'N/A' },
       ],

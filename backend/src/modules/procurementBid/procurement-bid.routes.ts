@@ -2167,12 +2167,12 @@ router.get('/admin/procurement/reports', authenticate, requireAccountType('admin
 
 router.get('/orders/procurement', authenticate, asyncRoute(async (req, res) => {
   const data = await orderService.listProcurementOrders(req.user!, req.query);
-  return apiResponse.success(res, data, 200, 'Procurement orders fetched');
+  return apiResponse.success(res, maskSensitive(data, { unmaskForAdmin: true, unmaskSelf: true }), 200, 'Procurement orders fetched');
 }));
 
 router.get('/orders/procurement/:orderId', authenticate, validate({ params: orderIdParamSchema }), asyncRoute(async (req, res) => {
   const data = await orderService.loadProcurementOrder(req.user!, Number(req.params.orderId));
-  return apiResponse.success(res, data, 200, 'Procurement order fetched');
+  return apiResponse.success(res, maskSensitive(data, { unmaskForAdmin: true, unmaskSelf: true }), 200, 'Procurement order fetched');
 }));
 
 router.get('/seller/pending-awards-and-pos', authenticate, requireAccountType('seller', 'shg'), asyncRoute(async (req, res) => {

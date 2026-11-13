@@ -78,6 +78,7 @@ export const maskPhone = (value: unknown) => {
 export interface MaskSensitiveOptions {
   unmaskForAdmin?: boolean;
   unmaskSelf?: boolean;
+  unmaskEmails?: boolean;
 }
 
 export const maskSensitive = <T>(input: T, options?: MaskSensitiveOptions): T => {
@@ -94,6 +95,7 @@ export const maskSensitive = <T>(input: T, options?: MaskSensitiveOptions): T =>
     if (Array.isArray(val)) return val.map(item => mask(item, newStack));
 
     const allowUnmaskedPii = Boolean(options?.unmaskForAdmin || options?.unmaskSelf);
+    const allowUnmaskedEmails = Boolean(allowUnmaskedPii || options?.unmaskEmails);
 
     return Object.entries(val).reduce<Record<string, unknown>>((acc, [key, value]) => {
       if (passthroughKeys.has(key)) {
@@ -116,7 +118,7 @@ export const maskSensitive = <T>(input: T, options?: MaskSensitiveOptions): T =>
         acc[key] = effectiveVal;
       } else if (options?.unmaskForAdmin && (key !== 'bankAccounts' && /accountNumber|bankAccount|bankAccountNo/i.test(key))) {
         acc[key] = effectiveVal;
-      } else if (allowUnmaskedPii && /(^|_)(email|officialEmail|contactEmail|complainantEmail|contactPersonEmail|verifyingEmail)$/i.test(key)) {
+      } else if (allowUnmaskedEmails && /(^|_)(email|officialEmail|contactEmail|complainantEmail|contactPersonEmail|verifyingEmail)$/i.test(key)) {
         acc[key] = effectiveVal;
       } else if (allowUnmaskedPii && /(^|_)(phone|mobile|officialPhone|contactPhone|complainantMobile|contactPersonMobile|verifyingMobile|mobileNumber)$/i.test(key)) {
         acc[key] = effectiveVal;

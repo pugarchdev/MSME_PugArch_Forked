@@ -24,6 +24,9 @@ export type PurchaseOrderDto = {
   id: number;
   poNumber: string;
   title: string;
+  tenderId?: number | string | null;
+  tender?: any;
+  bidId?: number | null;
   amount?: number | string;
   totalValue?: number;
   status?: string;

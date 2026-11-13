@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { AlertTriangle, AlertCircle, CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, MoreVertical, Building2, Calendar, MapPin, User, Copy, Package, CreditCard, Clock, Upload, Receipt, Lock, ClipboardCheck, Undo2 } from 'lucide-react';
+import { AlertTriangle, AlertCircle, CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, MoreVertical, Building2, Calendar, MapPin, User, Copy, Package, CreditCard, Clock, Upload, Receipt, Lock, ClipboardCheck, Undo2, ExternalLink } from 'lucide-react';
 import type { DocumentConfig } from '../lib/pdfEngine';
 import { PaymentReceiptUploadModal } from '../features/payments/components/PaymentReceiptUploadModal';
 import { PaymentReceiptViewModal } from '../features/payments/components/PaymentReceiptViewModal';
@@ -1326,11 +1326,20 @@ export default function PurchaseOrders() {
       console.warn('Could not resolve delivery for PO', err);
     }
 
-    // 3. Fallback to seller delivery management list
-    if (order.poNumber) {
-      router.push(`/seller/delivery-management?search=${encodeURIComponent(order.poNumber)}`);
+    // 3. Fallback to role-specific delivery management list
+    const isSellerSide = user?.role === 'seller' || user?.role === 'shg';
+    if (isSellerSide) {
+      if (order.poNumber) {
+        router.push(`/seller/delivery-management?search=${encodeURIComponent(order.poNumber)}`);
+      } else {
+        router.push('/seller/delivery-management');
+      }
     } else {
-      router.push('/seller/delivery-management');
+      if (order.poNumber) {
+        router.push(`/orders/tracking?search=${encodeURIComponent(order.poNumber)}`);
+      } else {
+        router.push('/orders/tracking');
+      }
     }
   };
 
@@ -1983,8 +1992,8 @@ export default function PurchaseOrders() {
               </div>
               
               {expectedDateFilter === 'Custom Date Range' && (
-                <div className="col-span-2 flex items-center gap-1.5 w-full">
-                  <div className="flex-1">
+                <div data-composite="true" className="col-span-2 flex items-center gap-1.5 w-full min-w-0">
+                  <div className="flex-1 min-w-0">
                     <DateTimePicker
                       mode="date"
                       size="sm"
@@ -1994,7 +2003,7 @@ export default function PurchaseOrders() {
                     />
                   </div>
                   <span className="text-slate-400 font-bold shrink-0">-</span>
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <DateTimePicker
                       mode="date"
                       size="sm"
@@ -2008,8 +2017,8 @@ export default function PurchaseOrders() {
               )}
 
               {/* Updated Date */}
-              <div className="col-span-2 flex items-center gap-1.5 w-full">
-                <div className="flex-1">
+              <div data-composite="true" className="col-span-2 flex items-center gap-1.5 w-full min-w-0">
+                <div className="flex-1 min-w-0">
                   <DateTimePicker
                     mode="date"
                     size="sm"
@@ -2019,7 +2028,7 @@ export default function PurchaseOrders() {
                   />
                 </div>
                 <span className="text-slate-300 font-black shrink-0">-</span>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <DateTimePicker
                     mode="date"
                     size="sm"
@@ -2326,7 +2335,7 @@ export default function PurchaseOrders() {
           aria-labelledby="po-modal-title"
         >
           <FocusTrap onEscape={() => setViewingOrder(null)}>
-            <div className="max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-2xl flex flex-col animate-in zoom-in-95 duration-200">
+            <div className="max-h-[92vh] w-full max-w-5xl xl:max-w-6xl overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-2xl flex flex-col animate-in zoom-in-95 duration-200">
               
               {/* Compact Sleek Header */}
               <div className="relative bg-gradient-to-r from-slate-950 via-slate-900 to-[#12335f] text-white px-5 py-3.5 sm:px-6 shrink-0 border-b border-slate-800/80 shadow-xs">
@@ -2402,14 +2411,36 @@ export default function PurchaseOrders() {
                 
                 {/* Order Overview Bar */}
                 <div className="rounded-xl bg-white p-4 border border-slate-200/80 shadow-2xs space-y-2.5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
                       <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">Order Title & Reference</span>
                       <h3 className="text-sm sm:text-base font-bold text-slate-900 leading-snug">{viewingOrder.title}</h3>
                     </div>
-                    <div className="sm:hidden text-right shrink-0">
-                      <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">Total</span>
-                      <span className="text-xs font-bold text-slate-900 font-mono">{formatCurrency(viewingOrder.amount || viewingOrder.totalValue)}</span>
+
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      {(() => {
+                        const tenderRef = (viewingOrder as any).tender?.tenderId || (viewingOrder as any).tender?.id || viewingOrder.tenderId || (viewingOrder as any).bidId;
+                        const targetUrl = tenderRef ? `/bids/${tenderRef}` : '/buyer/my-procurements';
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setViewingOrder(null);
+                              router.push(targetUrl);
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50/80 hover:bg-blue-100 hover:border-blue-300 px-3 py-1.5 text-xs font-bold text-blue-800 transition-colors shadow-2xs cursor-pointer"
+                            title="View associated procurement requirement & tender details"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5 text-blue-600" />
+                            <span>Procurement Details</span>
+                          </button>
+                        );
+                      })()}
+
+                      <div className="sm:hidden text-right shrink-0">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">Total</span>
+                        <span className="text-xs font-bold text-slate-900 font-mono">{formatCurrency(viewingOrder.amount || viewingOrder.totalValue)}</span>
+                      </div>
                     </div>
                   </div>
 
@@ -2431,6 +2462,21 @@ export default function PurchaseOrders() {
                         <Truck className="h-3 w-3 text-blue-600" />
                         Delivery: {readableStatus(viewingOrder.deliveryType)}
                       </span>
+                    )}
+
+                    {Boolean((viewingOrder as any).tender?.tenderId || viewingOrder.tenderId) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const tId = (viewingOrder as any).tender?.tenderId || (viewingOrder as any).tender?.id || viewingOrder.tenderId;
+                          setViewingOrder(null);
+                          router.push(`/bids/${tId}`);
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100 px-2.5 py-1 text-xs font-semibold text-indigo-800 transition-colors cursor-pointer"
+                      >
+                        <FileText className="h-3 w-3 text-indigo-600" />
+                        <span>Procurement: {(viewingOrder as any).tender?.tenderId || `TND-${viewingOrder.tenderId}`}</span>
+                      </button>
                     )}
                   </div>
                 </div>
@@ -2569,9 +2615,14 @@ export default function PurchaseOrders() {
                               {viewingOrder.buyer?.name && viewingOrder.buyer.name !== buyerOrgDisplay && (
                                 <p className="text-[10px] font-medium text-slate-600 truncate">Attn: {viewingOrder.buyer.name}</p>
                               )}
-                              {viewingOrder.buyer?.email && (
-                                <p className="text-[10px] font-medium text-slate-500 font-mono truncate">{viewingOrder.buyer.email}</p>
-                              )}
+                              {(() => {
+                                const buyerEmail = (viewingOrder.buyerId === user?.id && user?.email && !user.email.includes('*'))
+                                  ? user.email
+                                  : (viewingOrder.buyer?.email || (buyerObj as any).email);
+                                return buyerEmail ? (
+                                  <p className="text-[10px] font-medium text-slate-500 font-mono truncate" title={buyerEmail}>{buyerEmail}</p>
+                                ) : null;
+                              })()}
                             </div>
                           </div>
                         );
@@ -2605,9 +2656,14 @@ export default function PurchaseOrders() {
                               {viewingOrder.seller?.name && viewingOrder.seller.name !== sellerOrgDisplay && (
                                 <p className="text-[10px] font-medium text-slate-600 truncate">Contact: {viewingOrder.seller.name}</p>
                               )}
-                              {viewingOrder.seller?.email && (
-                                <p className="text-[10px] font-medium text-slate-500 font-mono truncate">{viewingOrder.seller.email}</p>
-                              )}
+                              {(() => {
+                                const sellerEmail = (viewingOrder.sellerId === user?.id && user?.email && !user.email.includes('*'))
+                                  ? user.email
+                                  : (viewingOrder.seller?.email || (sellerObj as any).email);
+                                return sellerEmail ? (
+                                  <p className="text-[10px] font-medium text-slate-500 font-mono truncate" title={sellerEmail}>{sellerEmail}</p>
+                                ) : null;
+                              })()}
                             </div>
                           </div>
                         );
@@ -2655,7 +2711,13 @@ export default function PurchaseOrders() {
                                   size="sm"
                                   onClick={() => {
                                     setViewingOrder(null);
-                                    router.push(`/seller/delivery-management?search=${encodeURIComponent(viewingOrder.poNumber || `DLV-${dt.id}`)}`);
+                                    if (dt.id) {
+                                      router.push(`/delivery/${dt.id}`);
+                                    } else if (isSeller) {
+                                      router.push(`/seller/delivery-management?search=${encodeURIComponent(viewingOrder.poNumber || `DLV-${dt.id}`)}`);
+                                    } else {
+                                      router.push(`/orders/tracking?search=${encodeURIComponent(viewingOrder.poNumber || `DLV-${dt.id}`)}`);
+                                    }
                                   }}
                                 />
                                 <span className="text-[10px] font-bold text-slate-600 uppercase">({readableStatus(dt.status || 'pending')})</span>
@@ -2849,7 +2911,10 @@ export default function PurchaseOrders() {
                         className="w-full bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold uppercase tracking-wider h-9 rounded-lg shadow-2xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
                         onClick={() => {
                           setViewingOrder(null);
-                          if (isSeller) {
+                          const activeDlvId = activeDelivery?.id || (viewingOrder.deliveryTrackings && viewingOrder.deliveryTrackings[0]?.id);
+                          if (activeDlvId) {
+                            router.push(`/delivery/${activeDlvId}`);
+                          } else if (isSeller) {
                             router.push(`/seller/delivery-management?search=${encodeURIComponent(viewingOrder.poNumber || '')}`);
                           } else {
                             router.push(`/orders/tracking?search=${encodeURIComponent(viewingOrder.poNumber || '')}`);
@@ -3240,8 +3305,8 @@ export default function PurchaseOrders() {
               </div>
 
               {/* Modal Sticky Action Footer - Harmonized & Professional */}
-              <div className="flex items-center justify-between gap-2.5 border-t border-slate-200 bg-white px-4 sm:px-5 py-3 shrink-0 shadow-lg overflow-x-auto no-scrollbar">
-                <div className="flex items-center gap-2 shrink-0">
+              <div className="flex flex-wrap items-center justify-between gap-2.5 border-t border-slate-200 bg-white px-4 sm:px-6 py-3.5 shrink-0 shadow-lg">
+                <div className="flex flex-wrap items-center gap-2 min-w-0">
                   {(() => {
                     const viewingStatusLower = String(viewingOrder.status || '').toLowerCase();
                     const viewingPoStatusLower = String((viewingOrder as any).poStatus || '').toLowerCase();
@@ -3742,7 +3807,7 @@ export default function PurchaseOrders() {
                   })()}
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 shrink-0 ml-auto">
                   <Button 
                     variant="outline" 
                     onClick={() => setReceiptModalOrder(viewingOrder)} 

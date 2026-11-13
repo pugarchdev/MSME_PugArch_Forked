@@ -172,6 +172,20 @@ export default function AdminCategoriesPage() {
     setIsAddModalOpen(true);
   };
 
+  const closeCategoryModal = () => {
+    setIsAddModalOpen(false);
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has('edit') || params.has('highlight')) {
+        params.delete('edit');
+        params.delete('highlight');
+        const newSearch = params.toString();
+        const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
+        window.history.replaceState({}, '', newUrl);
+      }
+    }
+  };
+
   const hasHandledUrlEdit = useRef(false);
   useEffect(() => {
     if (hasHandledUrlEdit.current || categories.length === 0) return;
@@ -186,6 +200,23 @@ export default function AdminCategoriesPage() {
         toast.info(`Opening category "${match.name}" to configure photo.`);
       }
     }
+  }, [categories]);
+
+  useEffect(() => {
+    const handleOpenCategoryEvent = (e: any) => {
+      const targetId = e?.detail?.categoryId;
+      if (!targetId || categories.length === 0) return;
+      const match = categories.find(c => String(c.id) === String(targetId));
+      if (match) {
+        openEditModal(match);
+        toast.info(`Opening category "${match.name}" to configure photo.`);
+      }
+    };
+
+    window.addEventListener('admin-open-category-modal', handleOpenCategoryEvent as EventListener);
+    return () => {
+      window.removeEventListener('admin-open-category-modal', handleOpenCategoryEvent as EventListener);
+    };
   }, [categories]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -318,14 +349,14 @@ export default function AdminCategoriesPage() {
           await uploadCategoryImage(Number(savedCategory.id), pendingImageFile);
         } catch (imgErr) {
           toast.warning(`Category ${editingCategory ? 'updated' : 'created'}, but image upload had an issue: ${imgErr instanceof Error ? imgErr.message : 'Upload failed'}`);
-          setIsAddModalOpen(false);
+          closeCategoryModal();
           await fetchCategories();
           return;
         }
       }
 
       toast.success(`Category ${editingCategory ? 'updated' : 'created'} successfully!`);
-      setIsAddModalOpen(false);
+      closeCategoryModal();
       await fetchCategories();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Network error while saving category');
@@ -962,7 +993,7 @@ export default function AdminCategoriesPage() {
                 </p>
               </div>
               <button
-                onClick={() => setIsAddModalOpen(false)}
+                onClick={closeCategoryModal}
                 className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 font-bold text-lg transition-colors"
               >
                 ×
@@ -1221,7 +1252,7 @@ export default function AdminCategoriesPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setIsAddModalOpen(false)}
+                  onClick={closeCategoryModal}
                   disabled={isSubmitting}
                   className="h-10 px-4 text-xs font-bold border-slate-300"
                 >

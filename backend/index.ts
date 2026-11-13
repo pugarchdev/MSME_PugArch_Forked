@@ -4699,7 +4699,7 @@ app.get('/api/purchase-orders', authenticate, authorize('buyer', 'seller', 'admi
       skip,
       take
     });
-    res.json({ success: true, purchaseOrders: maskSensitive(purchaseOrders), total });
+    res.json({ success: true, purchaseOrders: maskSensitive(purchaseOrders, { unmaskEmails: true }), total });
   } catch (err: any) {
     return handleFinancialRouteError(res, err);
   }
@@ -4720,7 +4720,7 @@ app.post('/api/purchase-orders/:id/accept', authenticate, authorize('seller', 'a
       key,
       handler: async () => {
         const workflow = await acceptPurchaseOrderAndCreateDelivery(purchaseOrderId, financialActor(req));
-        return { success: true, ...maskSensitive(workflow) };
+        return { success: true, ...maskSensitive(workflow, { unmaskEmails: true }) };
       }
     });
     res.json(result);
@@ -4741,7 +4741,7 @@ app.post('/api/purchase-orders/:id/inspection/accept', authenticate, authorize('
       financialActor(req),
       normalizeSpaces(req.body?.remarks)
     );
-    res.json({ success: true, ...maskSensitive(workflow) });
+    res.json({ success: true, ...maskSensitive(workflow, { unmaskEmails: true }) });
   } catch (err: any) {
     return handleFinancialRouteError(res, err);
   }
@@ -4765,7 +4765,7 @@ app.post('/api/purchase-orders/:id/invoices', authenticate, authorize('seller', 
           fileAssetId: req.body?.fileAssetId ? Number(req.body.fileAssetId) : null,
           metadata: req.body?.metadata || {}
         });
-        return { success: true, ...maskSensitive(workflow) };
+        return { success: true, ...maskSensitive(workflow, { unmaskEmails: true }) };
       }
     });
     res.status(201).json(result);

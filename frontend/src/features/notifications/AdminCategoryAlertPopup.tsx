@@ -16,7 +16,7 @@ interface PendingCategoryAlert {
   redirectUrl?: string;
 }
 
-const REMIND_DELAY_MS = 5 * 60 * 1000; // 5 minutes
+const REMIND_DELAY_MS = 60 * 60 * 1000; // 1 hour
 
 export default function AdminCategoryAlertPopup() {
   const { user } = useAuth();
@@ -34,6 +34,15 @@ export default function AdminCategoryAlertPopup() {
 
   const loadPendingCategoryAlerts = useCallback(async () => {
     if (!isAdmin) return;
+
+    // Never interrupt the admin if they are already editing/configuring a category
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search || '');
+      if (params.has('edit') || params.has('highlight')) {
+        setVisible(false);
+        return;
+      }
+    }
 
     try {
       // Query backend for all user-added custom categories that still don't have an image
@@ -59,6 +68,14 @@ export default function AdminCategoryAlertPopup() {
   useEffect(() => {
     if (!isAdmin) return;
 
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search || '');
+      if (params.has('edit') || params.has('highlight')) {
+        setVisible(false);
+        return;
+      }
+    }
+
     const snoozeKey = getSnoozeKey();
     if (typeof localStorage !== 'undefined') {
       const storedSnooze = localStorage.getItem(snoozeKey);
@@ -66,7 +83,7 @@ export default function AdminCategoryAlertPopup() {
         const snoozeTime = Number(storedSnooze);
         const remaining = snoozeTime - Date.now();
         if (remaining > 0) {
-          // Still within the 5-minute snooze window; set timer to awaken when remaining time expires
+          // Still within the 1-hour snooze window; set timer to awaken when remaining time expires
           if (snoozeTimerRef.current) clearTimeout(snoozeTimerRef.current);
           snoozeTimerRef.current = setTimeout(() => {
             localStorage.removeItem(snoozeKey);
@@ -86,14 +103,14 @@ export default function AdminCategoryAlertPopup() {
     };
   }, [user?.id, user?.role, loadPendingCategoryAlerts, getSnoozeKey]);
 
-  const remindIn5Minutes = () => {
+  const remindIn1Hour = () => {
     const snoozeUntil = Date.now() + REMIND_DELAY_MS;
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(getSnoozeKey(), String(snoozeUntil));
     }
     setVisible(false);
-    toast.info('Reminder scheduled for 5 minutes', {
-      description: 'This pop-up will reappear in 5 minutes until the category photo is uploaded.'
+    toast.info('Reminder scheduled for 1 hour', {
+      description: 'This pop-up will reappear in 1 hour until the category photo is uploaded.'
     });
 
     if (snoozeTimerRef.current) clearTimeout(snoozeTimerRef.current);
@@ -105,11 +122,11 @@ export default function AdminCategoryAlertPopup() {
     }, REMIND_DELAY_MS);
   };
 
-  // Handle ESC key to dismiss with 5-minute snooze
+  // Handle ESC key to dismiss with 1-hour snooze
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && visible) {
-        remindIn5Minutes();
+        remindIn1Hour();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -124,9 +141,24 @@ export default function AdminCategoryAlertPopup() {
     if (current.notificationId) {
       void postApi(`/api/notifications/${current.notificationId}/read`, {}).catch(() => undefined);
     }
+
+    // Immediately snooze popup for 1 hour so the alert popup stops and doesn't reopen over the editor
+    const snoozeUntil = Date.now() + REMIND_DELAY_MS;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(getSnoozeKey(), String(snoozeUntil));
+    }
+    if (snoozeTimerRef.current) clearTimeout(snoozeTimerRef.current);
     setVisible(false);
+
     const dest = current.redirectUrl || `/admin/categories?edit=${current.id}`;
-    window.location.href = dest;
+    if (typeof window !== 'undefined') {
+      if (window.location.pathname === '/admin/categories') {
+        window.history.pushState({}, '', dest);
+        window.dispatchEvent(new CustomEvent('admin-open-category-modal', { detail: { categoryId: current.id } }));
+      } else {
+        window.location.href = dest;
+      }
+    }
   };
 
   return (
@@ -137,9 +169,9 @@ export default function AdminCategoryAlertPopup() {
       aria-describedby="admin-category-alert-desc"
       className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 animate-in fade-in duration-200"
       onClick={(e) => {
-        // Dismiss with 5-minute reminder when clicking on the blurred backdrop
+        // Dismiss with 1-hour reminder when clicking on the blurred backdrop
         if (e.target === e.currentTarget) {
-          remindIn5Minutes();
+          remindIn1Hour();
         }
       }}
     >
@@ -172,9 +204,9 @@ export default function AdminCategoryAlertPopup() {
 
           <button
             type="button"
-            onClick={remindIn5Minutes}
-            title="Remind me in 5 minutes"
-            aria-label="Dismiss custom category alert for 5 minutes"
+            onClick={remindIn1Hour}
+            title="Remind me in 1 hour"
+            aria-label="Dismiss custom category alert for 1 hour"
             className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-amber-200 bg-white text-slate-500 transition hover:border-red-300 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
           >
             <X className="h-4 w-4" />
@@ -253,11 +285,11 @@ export default function AdminCategoryAlertPopup() {
           <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 pt-2 border-t border-slate-100">
             <button
               type="button"
-              onClick={remindIn5Minutes}
+              onClick={remindIn1Hour}
               className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition shadow-2xs focus:outline-none focus:ring-2 focus:ring-slate-300"
             >
               <Clock className="h-3.5 w-3.5 text-slate-500" />
-              <span>Remind me in 5 min</span>
+              <span>Remind me in 1 hour</span>
             </button>
 
             <button

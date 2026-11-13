@@ -4,6 +4,18 @@ import fs from 'fs';
 import { db, notifyWorkflowSoon } from './workflow/workflow-common.js';
 import { getFileContent } from './storage/storage.service.js';
 import { logger } from '../config/logger.js';
+import { isEncrypted, decryptField } from '../utils/crypto.js';
+
+const safeDecryptText = (val: unknown): string => {
+  if (typeof val === 'string' && isEncrypted(val)) {
+    try {
+      return decryptField(val);
+    } catch {
+      return val;
+    }
+  }
+  return typeof val === 'string' || typeof val === 'number' ? String(val).trim() : '';
+};
 
 /**
  * Validate external image URLs against SSRF:
@@ -689,30 +701,33 @@ export async function generatePurchaseOrderPdfBuffer(po: any): Promise<Buffer> {
     buyerReg.address ||
     'N/A';
 
-  const buyerGstin =
+  const buyerGstin = safeDecryptText(
     billingDetails.gstin ||
     buyer.organization?.gstin ||
     buyer.buyerProfile?.gst ||
     buyerReg.gstin ||
     buyerReg.gstDetails?.gstin ||
-    'N/A';
+    buyerReg.gstDetails?.gstNumber
+  ) || 'N/A';
 
-  const buyerPan =
+  const buyerPan = safeDecryptText(
     buyer.organization?.panNumber ||
     buyer.buyerProfile?.pan ||
     buyerReg.pan ||
     buyerReg.orgPan ||
     buyerReg.personalPan ||
-    'N/A';
+    buyerReg.gstDetails?.pan
+  ) || 'N/A';
 
-  const buyerPhone =
+  const buyerPhone = safeDecryptText(
     deliveryDetails.mobileNumber ||
     buyer.mobile ||
     buyer.buyerProfile?.mobile ||
     buyerReg.mobile ||
-    'N/A';
+    buyerReg.phone
+  ) || 'N/A';
 
-  const buyerEmail = buyer.email || buyerReg.email || buyerReg.userId || 'N/A';
+  const buyerEmail = safeDecryptText(buyer.email || buyerReg.email || buyerReg.userId) || 'N/A';
 
   const sellerName =
     seller.organization?.organizationName ||
@@ -731,12 +746,22 @@ export async function generatePurchaseOrderPdfBuffer(po: any): Promise<Buffer> {
     sellerReg.address ||
     'N/A';
 
-  const sellerGstin =
+  const sellerGstin = safeDecryptText(
     seller.organization?.gstin ||
     seller.sellerProfile?.gst ||
     sellerReg.gstin ||
     sellerReg.gstDetails?.gstin ||
-    'N/A';
+    sellerReg.gstDetails?.gstNumber
+  ) || 'N/A';
+
+  const sellerPan = safeDecryptText(
+    seller.organization?.panNumber ||
+    seller.sellerProfile?.pan ||
+    sellerReg.pan ||
+    sellerReg.orgPan ||
+    sellerReg.personalPan ||
+    sellerReg.gstDetails?.pan
+  ) || 'N/A';
 
   const sellerUdyam =
     seller.organization?.udyamNumber ||
@@ -746,13 +771,14 @@ export async function generatePurchaseOrderPdfBuffer(po: any): Promise<Buffer> {
     sellerReg.udyam ||
     null;
 
-  const sellerPhone =
+  const sellerPhone = safeDecryptText(
     seller.mobile ||
     seller.sellerProfile?.mobile ||
     sellerReg.mobile ||
-    'N/A';
+    sellerReg.phone
+  ) || 'N/A';
 
-  const sellerEmail = seller.email || sellerReg.email || 'N/A';
+  const sellerEmail = safeDecryptText(seller.email || sellerReg.email) || 'N/A';
 
   const poNum = po.poNumber || `PO-${po.id || 'N/A'}`;
   const dateStr = formatDate(po.createdAt || new Date());
@@ -852,7 +878,7 @@ export async function generatePurchaseOrderPdfBuffer(po: any): Promise<Buffer> {
 
       doc.fillColor('#0f172a').fontSize(8.5).font('Helvetica-Bold').text(sellerName, rightBoxX + 8, currentY + 20, { width: boxW - 48, ellipsis: true });
       doc.fillColor('#475569').fontSize(7.5).font('Helvetica').text(sellerAddress, rightBoxX + 8, currentY + 32, { width: boxW - 16, height: 26, ellipsis: true });
-      doc.fillColor('#0f172a').fontSize(7.5).font('Helvetica-Bold').text(`GSTIN: ${sellerGstin}${sellerUdyam ? `  |  Udyam: ${sellerUdyam}` : ''}`, rightBoxX + 8, currentY + 62, { width: boxW - 16, ellipsis: true });
+      doc.fillColor('#0f172a').fontSize(7.5).font('Helvetica-Bold').text(`GSTIN: ${sellerGstin}${sellerPan !== 'N/A' ? `  |  PAN: ${sellerPan}` : ''}${sellerUdyam ? `  |  Udyam: ${sellerUdyam}` : ''}`, rightBoxX + 8, currentY + 62, { width: boxW - 16, ellipsis: true });
       doc.fillColor('#64748b').fontSize(7).font('Helvetica').text(`Email: ${sellerEmail}  |  Mobile: ${sellerPhone}`, rightBoxX + 8, currentY + 74, { width: boxW - 16, ellipsis: true });
 
       currentY += boxH + 8;
@@ -1111,6 +1137,13 @@ export async function notifyPurchaseOrderCreated(purchaseOrderId: number) {
 
     if (!po) {
       logger.warn({ purchaseOrderId }, 'Purchase order not found for notification');
+      return;
+    }
+
+    const statusLower = String(po.status || po.poStatus || '').toLowerCase();
+    const isIssued = ['issued', 'pending_acceptance', 'order_placed', 'accepted', 'in_fulfillment'].includes(statusLower) && !po.isDraft;
+    if (!isIssued) {
+      logger.info({ purchaseOrderId, status: po.status, isDraft: po.isDraft }, '[notifyPurchaseOrderCreated] Skipping PO email notification because PO is still a draft / not yet issued');
       return;
     }
 

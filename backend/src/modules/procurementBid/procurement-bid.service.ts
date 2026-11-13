@@ -14,6 +14,7 @@ import { CANONICAL_METHOD_PREFIXES, getCanonicalLookupVariants } from '../../uti
 import { getNextCanonicalSequence } from '../../services/sequence.service.js';
 import { filterSealedDocuments } from './procurement-sealing.utils.js';
 import { parseDateIST } from '../../utils/dateUtils.js';
+import { notifySellerNewPurchaseOrder } from '../../services/invoice-pdf.service.js';
 
 const db = prisma as any;
 
@@ -5892,6 +5893,8 @@ export const generatePOForBid = async (req: AuthRequest, bidId: string, body: an
       type: 'purchase_order',
       redirectUrl: `/seller/orders?orderId=${po.purchaseOrder.id}`
     }).catch(() => undefined);
+
+    notifySellerNewPurchaseOrder(po.purchaseOrder.id).catch(() => undefined);
 
     try {
       broadcastToProcurement(bid.id, {
