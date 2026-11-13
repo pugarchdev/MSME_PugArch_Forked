@@ -10033,6 +10033,8 @@ router.get('/purchase-orders', authenticate, asyncRoute(async (req, res) => {
           }
         },
         tender: { select: { id: true, tenderId: true, title: true, category: true, status: true } },
+        externalPdfFile: { select: { id: true, originalName: true, url: true, key: true, size: true, mimeType: true } },
+        pdfFile: { select: { id: true, originalName: true, url: true, key: true, size: true, mimeType: true } },
         items: { include: { product: { select: { name: true, unitOfMeasure: true } } } },
         deliveryTrackings: { include: { events: { orderBy: { occurredAt: 'desc' }, take: 8 } } },
         invoices: { orderBy: { createdAt: 'desc' }, take: 5 },
@@ -10059,6 +10061,8 @@ router.get('/purchase-orders/:id', authenticate, asyncRoute(async (req, res) => 
     },
     include: {
       tender: { select: { id: true, tenderId: true, title: true, category: true, status: true } },
+      externalPdfFile: { select: { id: true, originalName: true, url: true, key: true, size: true, mimeType: true } },
+      pdfFile: { select: { id: true, originalName: true, url: true, key: true, size: true, mimeType: true } },
       buyer: {
         select: {
           id: true,
@@ -10399,6 +10403,7 @@ router.put('/purchase-orders/:id/draft', authenticate, authorize('buyer', 'admin
 
 router.post('/purchase-orders/:id/issue', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
+  const body = (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, any>;
   const po = await db.purchaseOrder.findUnique({
     where: { id },
     include: { buyer: { select: { organizationId: true } } }
@@ -10406,6 +10411,11 @@ router.post('/purchase-orders/:id/issue', authenticate, authorize('buyer', 'admi
   if (!po) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
   const isBuyerOrg = req.user?.organizationId && po.buyer?.organizationId === req.user?.organizationId;
   if (!isAdmin(req) && po.buyerId !== userId(req) && !isBuyerOrg) throw new ApiError(403, 'Forbidden', 'FORBIDDEN');
+
+  const incomingPdfId = body.externalPdfFileId ? Number(body.externalPdfFileId) : undefined;
+  if (incomingPdfId && Number.isInteger(incomingPdfId) && incomingPdfId > 0) {
+    await assertFileAssetOwnership(incomingPdfId, req);
+  }
 
   statusTransitions.purchaseOrder(po.status, 'issued');
   const updated = await db.purchaseOrder.update({
@@ -10415,12 +10425,13 @@ router.post('/purchase-orders/:id/issue', authenticate, authorize('buyer', 'admi
       poStatus: poStatusEnumFor('issued') as any,
       isDraft: false,
       issuedAt: new Date(),
-      version: { increment: 1 }
+      version: { increment: 1 },
+      ...(incomingPdfId ? { externalPdfFileId: incomingPdfId } : {})
     },
     include: { items: true, buyer: true, seller: true }
   });
 
-  notifySellerNewPurchaseOrder(po.id).catch(() => undefined);
+  notifySellerNewPurchaseOrder(updated.id).catch(() => undefined);
   await auditWrite(req, 'purchase_order.issued', 'purchaseOrder', id);
   ok(res, updated, 200, { unmaskEmails: true });
 }));

@@ -289,10 +289,19 @@ export const canAccessFileAsset = async (asset: any, user: { id: number; role: s
         { pdfFileId: asset.id }
       ]
     },
-    select: { buyerId: true, sellerId: true }
+    select: {
+      buyerId: true,
+      sellerId: true,
+      buyer: { select: { organizationId: true } },
+      seller: { select: { organizationId: true } }
+    }
   }).catch(() => null);
 
-  if (poDoc && (poDoc.buyerId === user.id || poDoc.sellerId === user.id)) return true;
+  if (poDoc) {
+    if (poDoc.buyerId === user.id || poDoc.sellerId === user.id) return true;
+    const userOrgId = (user as any).organizationId;
+    if (userOrgId && (poDoc.buyer?.organizationId === userOrgId || poDoc.seller?.organizationId === userOrgId)) return true;
+  }
 
   // Check if file asset is linked via ProcurementBidDocument (regardless of asset.entityId being null or set)
   const procurementDoc = await prisma.procurementBidDocument.findFirst({
@@ -977,10 +986,28 @@ export const getFileContent = async (fileId: number, user: { id: number; role: s
     return result;
   };
 
+  const rawKey = assetObj?.key || '';
+  const cleanKey = rawKey.replace(/^(\/)?uploads\//, '');
+  const baseKey = path.basename(rawKey);
+  const rawUrl = (assetObj?.url || '').replace(/^(\/)?uploads\//, '');
+
   const localCandidates = [
-    path.resolve(process.cwd(), 'uploads', assetObj?.key || ''),
-    path.resolve(process.cwd(), 'backend/uploads', assetObj?.key || ''),
-    path.resolve(process.cwd(), assetObj?.key || '')
+    path.resolve(process.cwd(), 'uploads', rawKey),
+    path.resolve(process.cwd(), 'uploads', cleanKey),
+    path.resolve(process.cwd(), 'uploads', baseKey),
+    path.resolve(process.cwd(), 'backend/uploads', rawKey),
+    path.resolve(process.cwd(), 'backend/uploads', cleanKey),
+    path.resolve(process.cwd(), 'backend/uploads', baseKey),
+    path.resolve(process.cwd(), '../uploads', rawKey),
+    path.resolve(process.cwd(), '../uploads', cleanKey),
+    path.resolve(process.cwd(), '../uploads', baseKey),
+    path.resolve(process.cwd(), rawKey),
+    path.resolve(process.cwd(), cleanKey),
+    ...(rawUrl ? [
+      path.resolve(process.cwd(), 'uploads', rawUrl),
+      path.resolve(process.cwd(), 'backend/uploads', rawUrl),
+      path.resolve(process.cwd(), '../uploads', rawUrl)
+    ] : [])
   ];
 
   for (const cand of localCandidates) {

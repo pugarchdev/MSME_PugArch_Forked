@@ -413,7 +413,7 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
     // Fall back to Tender / Rate Contract / Requirement lookup below
   }
 
-  if (token.startsWith('TENDER-') || token.startsWith('TND-')) {
+  if (token.startsWith('TENDER-') || token.startsWith('TND-') || /^\d+$/.test(token)) {
     try {
       const data = await service.resolveTenderBidActivity(token);
       if (data) {

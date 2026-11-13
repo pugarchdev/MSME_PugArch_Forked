@@ -9,6 +9,7 @@ import { uploadFile } from '../services/storage/storage.service.js';
 import { ApiError } from '../utils/ApiError.js';
 import { extractProcurementDocument, type DocumentExtractionResult } from '../services/ai/document-extractor.service.js';
 import { generateSapInvoiceExport } from '../services/export/sap-export.service.js';
+import { notifySellerNewPurchaseOrder } from '../services/invoice-pdf.service.js';
 
 const router = Router();
 
@@ -407,6 +408,11 @@ router.post(
     });
 
     logger.info(`[ExternalProcurement] Successfully imported ${payload.externalSystem} order: ${createdPo.poNumber}`);
+    if (!payload.isDraft) {
+      notifySellerNewPurchaseOrder(createdPo.id).catch(err => {
+        logger.warn({ err, poId: createdPo.id }, '[ExternalProcurement] Failed to notify seller of imported PO');
+      });
+    }
     ok(res, createdPo, 201);
   })
 );

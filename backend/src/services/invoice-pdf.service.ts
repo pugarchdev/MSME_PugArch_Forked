@@ -1093,15 +1093,31 @@ export async function getOrGeneratePurchaseOrderPdfBuffer(po: any): Promise<{ bu
     }
   }
 
+  if (!fullPo.externalPdfFileId && !fullPo.pdfFileId && poId > 0) {
+    try {
+      const freshPo = await db.purchaseOrder.findUnique({
+        where: { id: poId },
+        select: { externalPdfFileId: true, pdfFileId: true, poNumber: true }
+      });
+      if (freshPo?.externalPdfFileId) {
+        fullPo = { ...fullPo, externalPdfFileId: freshPo.externalPdfFileId };
+      }
+      if (freshPo?.pdfFileId) {
+        fullPo = { ...fullPo, pdfFileId: freshPo.pdfFileId };
+      }
+    } catch {}
+  }
+
   const attachedFileId = fullPo.externalPdfFileId || fullPo.pdfFileId;
   const filename = `PurchaseOrder_${fullPo.poNumber || `PO-${fullPo.id || 'N/A'}`}.pdf`;
 
   if (attachedFileId) {
     try {
       const asset = await db.fileAsset.findUnique({ where: { id: attachedFileId } });
-      if (asset && asset.status === 'active') {
-        const stored = await getFileContent(asset.id, { id: asset.ownerId, role: asset.ownerRole || 'buyer' });
+      if (asset && asset.status !== 'deleted') {
+        const stored = await getFileContent(asset.id, { id: asset.ownerId || fullPo.buyerId || 1, role: 'admin' });
         if (stored?.buffer && stored.buffer.length > 0) {
+          logger.info({ poId: fullPo.id, assetId: asset.id, bytes: stored.buffer.length, filename: asset.originalName }, '[getOrGeneratePurchaseOrderPdfBuffer] Successfully resolved authentic uploaded PO PDF');
           return {
             buffer: stored.buffer,
             filename: asset.originalName || filename
@@ -1160,7 +1176,7 @@ export async function notifyPurchaseOrderCreated(purchaseOrderId: number) {
     }
 
     const statusLower = String(po.status || po.poStatus || '').toLowerCase();
-    const isIssued = ['issued', 'pending_acceptance', 'order_placed', 'accepted', 'in_fulfillment'].includes(statusLower) && !po.isDraft;
+    const isIssued = ['issued', 'pending_acceptance', 'order_placed', 'accepted', 'in_fulfillment', 'generated', 'order_confirmed'].includes(statusLower) && !po.isDraft;
     if (!isIssued) {
       logger.info({ purchaseOrderId, status: po.status, isDraft: po.isDraft }, '[notifyPurchaseOrderCreated] Skipping PO email notification because PO is still a draft / not yet issued');
       return;

@@ -838,6 +838,45 @@ const OrderActionDropdown = ({
   );
 };
 
+const resolveProcurementTargetUrl = (order: any, userRole?: string): string | null => {
+  if (!order) return null;
+  const meta = (order.metadata && typeof order.metadata === 'object' ? order.metadata : {}) as Record<string, any>;
+  
+  // 1. Direct tender reference (string tenderId preferred e.g. TND-2026-0001)
+  const tenderCode = order.tender?.tenderId || meta.tenderCode || meta.tenderNumber;
+  if (tenderCode) return `/bids/${encodeURIComponent(String(tenderCode))}`;
+
+  // 2. Metadata bidNumber or requirementNumber (e.g. RFQ-..., LTND-..., RC-...)
+  const bidNumber = meta.bidNumber || meta.requirementNumber || meta.referenceNumber;
+  if (bidNumber) return `/bids/${encodeURIComponent(String(bidNumber))}`;
+
+  // 3. Metadata bidId or requirementId
+  const metaBidId = meta.bidId || meta.requirementId;
+  if (metaBidId) return `/bids/${encodeURIComponent(String(metaBidId))}`;
+
+  // 4. Reverse auction reference
+  if (order.sourceType === 'auction' && order.sourceId) {
+    return `/bids/RA-${order.sourceId}`;
+  }
+  const auctionNoteMatch = String(order.notes || '').match(/auctionId:(\d+)/i);
+  if (auctionNoteMatch) {
+    return `/bids/RA-${auctionNoteMatch[1]}`;
+  }
+
+  // 5. Order bidId
+  if (order.bidId) return `/bids/${encodeURIComponent(String(order.bidId))}`;
+
+  // 6. Order tenderId
+  if (order.tenderId) return `/bids/${encodeURIComponent(String(order.tenderId))}`;
+  if (order.tender?.id) return `/bids/${encodeURIComponent(String(order.tender.id))}`;
+
+  // 7. Purchase request id / procurement request
+  const prId = order.purchaseRequestId || meta.procurementRequestId;
+  if (prId) return `/bids/${encodeURIComponent(String(prId))}`;
+
+  return null;
+};
+
 export default function PurchaseOrders() {
   const { user } = useAuth();
   const router = useRouter();
@@ -2386,6 +2425,28 @@ export default function PurchaseOrders() {
                       )} />
                       {readableStatus(viewingOrder.status)}
                     </span>
+
+                    {/* Attached PO PDF Indicator Button */}
+                    {Boolean((viewingOrder as any).externalPdfFileId || (viewingOrder as any).pdfFileId) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const fileId = (viewingOrder as any).externalPdfFileId || (viewingOrder as any).pdfFileId;
+                          openFileAsset({
+                            id: fileId,
+                            fileAssetId: fileId,
+                            originalName: (viewingOrder as any).externalPdfFile?.originalName || (viewingOrder as any).pdfFile?.originalName || `Purchase_Order_${viewingOrder.poNumber}.pdf`
+                          }, 'Purchase Order PDF').catch(err => {
+                            toast.error(err instanceof Error ? err.message : 'Unable to open PO PDF');
+                          });
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 px-2.5 py-0.5 text-[10px] sm:text-xs font-semibold cursor-pointer transition-colors shrink-0"
+                        title="View official uploaded Purchase Order PDF"
+                      >
+                        <FileText className="h-3 w-3 text-indigo-300" />
+                        <span>Attached PO PDF</span>
+                      </button>
+                    )}
                   </div>
 
                   {/* Right Side: Total Amount & Close */}
@@ -2419,17 +2480,25 @@ export default function PurchaseOrders() {
 
                     <div className="flex items-center gap-2.5 shrink-0">
                       {(() => {
-                        const tenderRef = (viewingOrder as any).tender?.tenderId || (viewingOrder as any).tender?.id || viewingOrder.tenderId || (viewingOrder as any).bidId;
-                        const targetUrl = tenderRef ? `/bids/${tenderRef}` : '/buyer/my-procurements';
+                        const targetUrl = resolveProcurementTargetUrl(viewingOrder, (user as any)?.role);
                         return (
                           <button
                             type="button"
                             onClick={() => {
-                              setViewingOrder(null);
-                              router.push(targetUrl);
+                              if (targetUrl) {
+                                setViewingOrder(null);
+                                router.push(targetUrl);
+                              } else {
+                                toast.info('This purchase order was created directly and has no linked tender or procurement bid.');
+                              }
                             }}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50/80 hover:bg-blue-100 hover:border-blue-300 px-3 py-1.5 text-xs font-bold text-blue-800 transition-colors shadow-2xs cursor-pointer"
-                            title="View associated procurement requirement & tender details"
+                            className={cn(
+                              "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors shadow-2xs cursor-pointer",
+                              targetUrl
+                                ? "border-blue-200 bg-blue-50/80 hover:bg-blue-100 hover:border-blue-300 text-blue-800"
+                                : "border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600"
+                            )}
+                            title={targetUrl ? "View associated procurement requirement & tender details" : "Direct Purchase Order (No tender link)"}
                           >
                             <ExternalLink className="h-3.5 w-3.5 text-blue-600" />
                             <span>Procurement Details</span>
@@ -2464,19 +2533,11 @@ export default function PurchaseOrders() {
                       </span>
                     )}
 
-                    {Boolean((viewingOrder as any).tender?.tenderId || viewingOrder.tenderId) && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const tId = (viewingOrder as any).tender?.tenderId || (viewingOrder as any).tender?.id || viewingOrder.tenderId;
-                          setViewingOrder(null);
-                          router.push(`/bids/${tId}`);
-                        }}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100 px-2.5 py-1 text-xs font-semibold text-indigo-800 transition-colors cursor-pointer"
-                      >
+                    {Boolean((viewingOrder as any).tender?.tenderId || viewingOrder.tenderId || (viewingOrder as any).bidId || (viewingOrder as any).metadata?.bidNumber) && (
+                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50/70 px-2.5 py-1 text-xs font-semibold text-indigo-800">
                         <FileText className="h-3 w-3 text-indigo-600" />
-                        <span>Procurement: {(viewingOrder as any).tender?.tenderId || `TND-${viewingOrder.tenderId}`}</span>
-                      </button>
+                        <span>Procurement: {(viewingOrder as any).tender?.tenderId || ((viewingOrder as any).tenderId ? `TND-${(viewingOrder as any).tenderId}` : ((viewingOrder as any).metadata?.bidNumber || (viewingOrder as any).bidId || 'Linked'))}</span>
+                      </span>
                     )}
                   </div>
                 </div>
@@ -2575,6 +2636,65 @@ export default function PurchaseOrders() {
                     </div>
                   );
                 })()}
+
+                {/* Official Uploaded Purchase Order (PDF) Card */}
+                {Boolean((viewingOrder as any).externalPdfFileId || (viewingOrder as any).pdfFileId) && (
+                  <div className="rounded-xl bg-gradient-to-r from-blue-50/90 via-indigo-50/70 to-slate-50 border border-blue-200/80 p-4 shadow-2xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white shadow-xs">
+                          <FileText className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 bg-blue-100/80 px-2 py-0.5 rounded-md">
+                              Official Document
+                            </span>
+                            <span className="text-xs font-semibold text-slate-500">
+                              {(viewingOrder as any).externalPdfFile?.size ? `${Math.round((viewingOrder as any).externalPdfFile.size / 1024)} KB` : 'PDF'}
+                            </span>
+                          </div>
+                          <h4 className="text-sm font-bold text-slate-900 mt-1 truncate">
+                            {(viewingOrder as any).externalPdfFile?.originalName || (viewingOrder as any).pdfFile?.originalName || `Purchase_Order_${viewingOrder.poNumber}.pdf`}
+                          </h4>
+                          <p className="text-xs text-slate-600 mt-0.5">
+                            Official authentic Purchase Order document uploaded and verified by buyer organization.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const fileId = (viewingOrder as any).externalPdfFileId || (viewingOrder as any).pdfFileId;
+                            openFileAsset({
+                              id: fileId,
+                              fileAssetId: fileId,
+                              originalName: (viewingOrder as any).externalPdfFile?.originalName || (viewingOrder as any).pdfFile?.originalName || `Purchase_Order_${viewingOrder.poNumber}.pdf`
+                            }, 'Purchase Order PDF').catch(err => {
+                              toast.error(err instanceof Error ? err.message : 'Unable to open PO PDF');
+                            });
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          <span>View PDF</span>
+                        </button>
+                        <a
+                          href={`/api/files/${(viewingOrder as any).externalPdfFileId || (viewingOrder as any).pdfFileId}/download`}
+                          target="_blank"
+                          rel="noreferrer"
+                          download
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-3 py-1.5 text-xs font-bold transition-colors shadow-2xs cursor-pointer"
+                        >
+                          <Download className="h-3.5 w-3.5 text-slate-500" />
+                          <span>Download</span>
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Fulfillment Parties & Settings Grid */}
                 <div className="grid gap-4 md:grid-cols-2">
@@ -3556,26 +3676,6 @@ export default function PurchaseOrders() {
                               </Button>
                             )}
 
-                            {/* View attached official external SAP PDF */}
-                            {(viewingOrder as any).externalPdfFileId && (
-                              <Button
-                                variant="outline"
-                                onClick={() => {
-                                  openFileAsset({
-                                    id: (viewingOrder as any).externalPdfFileId,
-                                    fileAssetId: (viewingOrder as any).externalPdfFileId,
-                                    originalName: (viewingOrder as any).externalPdfFile?.originalName || 'SAP_Purchase_Order.pdf'
-                                  }, 'SAP_Purchase_Order.pdf').catch(err => {
-                                    toast.error(err instanceof Error ? err.message : 'Unable to open PO PDF');
-                                  });
-                                }}
-                                className="h-9 border-indigo-200 bg-indigo-50/60 hover:bg-indigo-100 text-indigo-800 text-xs font-bold uppercase tracking-wider rounded-lg px-3.5 whitespace-nowrap cursor-pointer shadow-2xs flex items-center gap-1.5"
-                              >
-                                <FileText className="h-3.5 w-3.5 text-indigo-600" />
-                                <span>View SAP PO PDF</span>
-                              </Button>
-                            )}
-
                             {/* Export SAP MIRO Batch */}
                             {activeInvoice && (
                               <Button
@@ -3808,6 +3908,26 @@ export default function PurchaseOrders() {
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0 ml-auto">
+                  {Boolean((viewingOrder as any).externalPdfFileId || (viewingOrder as any).pdfFileId) && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        const fileId = (viewingOrder as any).externalPdfFileId || (viewingOrder as any).pdfFileId;
+                        openFileAsset({
+                          id: fileId,
+                          fileAssetId: fileId,
+                          originalName: (viewingOrder as any).externalPdfFile?.originalName || (viewingOrder as any).pdfFile?.originalName || `Purchase_Order_${viewingOrder.poNumber}.pdf`
+                        }, 'Purchase Order PDF').catch(err => {
+                          toast.error(err instanceof Error ? err.message : 'Unable to open PO PDF');
+                        });
+                      }}
+                      className="h-9 border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100 text-indigo-800 text-xs font-bold uppercase tracking-wider rounded-lg px-3.5 whitespace-nowrap cursor-pointer shadow-2xs flex items-center gap-1.5"
+                      title="View authentic uploaded Purchase Order PDF"
+                    >
+                      <Eye className="h-3.5 w-3.5 text-indigo-600" />
+                      <span>View Uploaded PO PDF</span>
+                    </Button>
+                  )}
                   <Button 
                     variant="outline" 
                     onClick={() => setReceiptModalOrder(viewingOrder)} 
@@ -3815,7 +3935,6 @@ export default function PurchaseOrders() {
                   >
                     <Receipt className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> View Official PO
                   </Button>
-                 
                 </div>
               </div>
 

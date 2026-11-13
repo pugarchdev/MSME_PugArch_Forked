@@ -30,7 +30,8 @@ import {
   Lock,
   ShieldCheck,
   ExternalLink,
-  Scale
+  Scale,
+  Eye
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { toast } from 'sonner';
@@ -40,7 +41,7 @@ import type { DocumentConfig } from '../../../lib/pdfEngine';
 import { FocusTrap } from '../../../components/ui/FocusTrap';
 import { useAuth } from '../../../hooks/useAuth';
 import { useRouter } from 'next/navigation';
-import { prewarmFileAssetPreview } from '../../../lib/files';
+import { openFileAsset, prewarmFileAssetPreview } from '../../../lib/files';
 import { PbgManagementCard } from './PbgManagementCard';
 import { L1NegotiationModal } from './L1NegotiationModal';
 
@@ -1165,10 +1166,25 @@ export function PurchaseOrderReceiptModal({
                         </h2>
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <p className="text-[10px] text-slate-500 font-medium">Official Purchase Order Document</p>
-                          {Boolean((order as any)?.externalPdfFileId) && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
-                              Buyer Signed PO Attached
-                            </span>
+                          {Boolean((order as any)?.externalPdfFileId || (order as any)?.pdfFileId) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const fileId = (order as any)?.externalPdfFileId || (order as any)?.pdfFileId;
+                                openFileAsset({
+                                  id: fileId,
+                                  fileAssetId: fileId,
+                                  originalName: (order as any)?.externalPdfFile?.originalName || (order as any)?.pdfFile?.originalName || `Purchase_Order_${order.poNumber || order.id}.pdf`
+                                }, 'Purchase Order PDF').catch(err => {
+                                  toast.error(err instanceof Error ? err.message : 'Unable to open PO PDF');
+                                });
+                              }}
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-200 cursor-pointer transition-colors"
+                              title="Click to view authentic uploaded PO PDF"
+                            >
+                              <Eye className="h-2.5 w-2.5 text-blue-700" />
+                              <span>Buyer Signed PO Attached</span>
+                            </button>
                           )}
                         </div>
                       </div>
@@ -1890,6 +1906,27 @@ export function PurchaseOrderReceiptModal({
             >
               <Scale className="mr-1.5 h-3.5 w-3.5 text-blue-700" /> CVC L1 Negotiation
             </Button>
+
+            {Boolean((order as any)?.externalPdfFileId || (order as any)?.pdfFileId) && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const fileId = (order as any)?.externalPdfFileId || (order as any)?.pdfFileId;
+                  openFileAsset({
+                    id: fileId,
+                    fileAssetId: fileId,
+                    originalName: (order as any)?.externalPdfFile?.originalName || (order as any)?.pdfFile?.originalName || `Purchase_Order_${order.poNumber || order.id}.pdf`
+                  }, 'Purchase Order PDF').catch(err => {
+                    toast.error(err instanceof Error ? err.message : 'Unable to open PO PDF');
+                  });
+                }}
+                className="h-9 border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100 text-indigo-800 text-xs font-bold uppercase tracking-wider rounded-xl px-3.5 whitespace-nowrap cursor-pointer shadow-xs flex items-center gap-1.5"
+                title="View authentic uploaded Purchase Order PDF"
+              >
+                <Eye className="h-3.5 w-3.5 text-indigo-600" />
+                <span>View Uploaded PO</span>
+              </Button>
+            )}
 
             {(() => {
               const hasInvoice = Boolean(
