@@ -281,6 +281,19 @@ export const canAccessFileAsset = async (asset: any, user: { id: number; role: s
   if (user.role === 'admin' || user.role === 'master_admin') return true;
   if (asset.ownerId === user.id) return true;
 
+  // Purchase Order PDF access check (buyer, seller, or admin linked to the PO)
+  const poDoc = await prisma.purchaseOrder.findFirst({
+    where: {
+      OR: [
+        { externalPdfFileId: asset.id },
+        { pdfFileId: asset.id }
+      ]
+    },
+    select: { buyerId: true, sellerId: true }
+  }).catch(() => null);
+
+  if (poDoc && (poDoc.buyerId === user.id || poDoc.sellerId === user.id)) return true;
+
   // Check if file asset is linked via ProcurementBidDocument (regardless of asset.entityId being null or set)
   const procurementDoc = await prisma.procurementBidDocument.findFirst({
     where: { fileAssetId: asset.id },

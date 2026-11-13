@@ -615,6 +615,10 @@ const allowedFileEntityTypes = new Set([
   'procurement_checkout',
   'procurement_draft',
   'rate_contract_document',
+  'purchase_order',
+  'po',
+  'external_procurement_document',
+  'external_po',
   'payment',
   'payment_proof',
   'receipt',
@@ -674,7 +678,11 @@ const canAttachFileToEntity = async (
     context.entityType === 'receipt' ||
     context.entityType === 'offline_payment' ||
     context.entityType === 'procurement_draft' ||
-    context.entityType === 'rate_contract_document'
+    context.entityType === 'rate_contract_document' ||
+    context.entityType === 'purchase_order' ||
+    context.entityType === 'po' ||
+    context.entityType === 'external_procurement_document' ||
+    context.entityType === 'external_po'
   ) return true;
   if (context.entityType === 'tender') return checkOwnership('tender', context.entityId, user);
   if (context.entityType === 'bid') return checkOwnership('bid', context.entityId, user);
@@ -3135,8 +3143,12 @@ const handleSecureUpload = async (req: AuthRequest & { file?: Express.Multer.Fil
 
     const payload = {
       success: true,
+      fileId: asset.id,
+      fileAssetId: asset.id,
+      id: asset.id,
       file: {
         ...toFileResponse(asset),
+        id: asset.id,
         url: viewUrl,
         documentUrl: viewUrl
       },

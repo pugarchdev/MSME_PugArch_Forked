@@ -15,6 +15,7 @@ import {
   Package,
   Plus,
   Trash2,
+  Eye,
   Calculator,
   ChevronDown
 } from 'lucide-react';
@@ -334,26 +335,44 @@ export function EditPurchaseOrderModal({
     formData.append('entityType', 'purchase_order');
 
     try {
-      const res = await api.fetch('/api/files/upload', {
+      let res = await api.fetch('/api/files/upload', {
         method: 'POST',
         body: formData,
       });
+
+      if (!res.ok) {
+        // Fallback to /api/upload
+        res = await api.fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+      }
+
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.message || data?.error || 'Upload failed');
       const payload = data?.data || data;
-      const fileId = payload?.fileAsset?.id || payload?.fileId || payload?.file?.id || payload?.id;
-      setPdfFileId(fileId ? Number(fileId) : null);
+      const fileId = payload?.fileAsset?.id || payload?.fileAssetId || payload?.fileId || payload?.file?.id || payload?.id;
+      if (!fileId) throw new Error('Server did not return a valid file asset ID');
+
+      setPdfFileId(Number(fileId));
       setPdfFileName(file.name);
       toast.success('Official PO PDF attached successfully.');
 
-      // Auto-extract if fields are empty or default
-      if (!externalPoNumber || items.length <= 1) {
-        await handleExtractFromPdf(file);
+      // Auto-extract if fields are empty or default (isolated so parsing warning does not fail attachment)
+      try {
+        if (!externalPoNumber || items.length <= 1) {
+          await handleExtractFromPdf(file);
+        }
+      } catch (extractErr) {
+        console.warn('Auto-extraction non-fatal notice:', extractErr);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to upload PDF file');
     } finally {
       setUploadingPdf(false);
+      if (e.target) {
+        e.target.value = '';
+      }
     }
   };
 
@@ -405,7 +424,7 @@ export function EditPurchaseOrderModal({
           expectedDelivery: expectedDelivery || undefined,
           deliveryAddress: deliveryAddress.trim() || undefined,
           paymentTerms: paymentTerms.trim() || undefined,
-          externalPdfFileId: pdfFileId || undefined,
+          externalPdfFileId: pdfFileId ?? null,
           items: sanitizedItems
         });
 
@@ -429,7 +448,7 @@ export function EditPurchaseOrderModal({
           expectedDelivery: expectedDelivery || undefined,
           deliveryAddress: deliveryAddress.trim() || undefined,
           paymentTerms: paymentTerms.trim() || undefined,
-          externalPdfFileId: pdfFileId || undefined,
+          externalPdfFileId: pdfFileId ?? null,
           reason: amendmentReason.trim(),
           amendmentReason: amendmentReason.trim(),
           items: sanitizedItems
@@ -923,19 +942,31 @@ export function EditPurchaseOrderModal({
                     disabled={uploadingPdf || extractingPdf || submitting}
                   />
                   {pdfFileId && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPdfFileId(null);
-                        setPdfFileName('');
-                        toast.info('Document attachment unlinked.');
-                      }}
-                      className="p-1.5 text-slate-400 hover:text-rose-600 transition"
-                      title="Unlink PDF"
-                      aria-label="Unlink PDF"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <a
+                        href={`/api/files/${pdfFileId}/view`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-1.5 text-slate-400 hover:text-indigo-600 transition"
+                        title="View Attached PDF"
+                        aria-label="View Attached PDF"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPdfFileId(null);
+                          setPdfFileName('');
+                          toast.info('Document attachment unlinked.');
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 transition"
+                        title="Unlink PDF"
+                        aria-label="Unlink PDF"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>

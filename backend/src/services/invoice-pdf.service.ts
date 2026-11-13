@@ -1093,7 +1093,26 @@ export async function getOrGeneratePurchaseOrderPdfBuffer(po: any): Promise<{ bu
     }
   }
 
+  const attachedFileId = fullPo.externalPdfFileId || fullPo.pdfFileId;
   const filename = `PurchaseOrder_${fullPo.poNumber || `PO-${fullPo.id || 'N/A'}`}.pdf`;
+
+  if (attachedFileId) {
+    try {
+      const asset = await db.fileAsset.findUnique({ where: { id: attachedFileId } });
+      if (asset && asset.status === 'active') {
+        const stored = await getFileContent(asset.id, { id: asset.ownerId, role: asset.ownerRole || 'buyer' });
+        if (stored?.buffer && stored.buffer.length > 0) {
+          return {
+            buffer: stored.buffer,
+            filename: asset.originalName || filename
+          };
+        }
+      }
+    } catch (err) {
+      logger.warn({ err, attachedFileId }, 'Failed to fetch uploaded PO PDF buffer, falling back to generator');
+    }
+  }
+
   const buffer = await generatePurchaseOrderPdfBuffer(fullPo);
   return { buffer, filename };
 }
