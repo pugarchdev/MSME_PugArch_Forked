@@ -29,12 +29,25 @@ import { FocusTrap } from '../../../components/ui/FocusTrap';
 interface EditableLineItem {
   itemName: string;
   description?: string;
-  quantity: number;
+  quantity: number | string;
   unitOfMeasure: string;
-  unitPrice: number;
+  unitPrice: number | string;
   taxRate: number;
   totalAmount: number;
 }
+
+const cleanNumberInput = (raw: string): string => {
+  if (!raw) return '';
+  let val = String(raw).replace(/[^0-9.]/g, '');
+  const parts = val.split('.');
+  if (parts.length > 2) {
+    val = parts[0] + '.' + parts.slice(1).join('');
+  }
+  if (/^0[0-9]/.test(val)) {
+    val = val.replace(/^0+/, '') || '0';
+  }
+  return val;
+};
 
 interface MatchedVendor {
   matched: boolean;
@@ -463,13 +476,21 @@ export function ImportExternalOrderModal({
       return;
     }
 
-    if (lineItems.some(item => !item.itemName.trim() || item.quantity <= 0)) {
+    if (lineItems.some(item => !item.itemName.trim() || Number(item.quantity) <= 0)) {
       toast.error('All line items must have a valid item name and quantity greater than zero.');
       return;
     }
 
     setIsSubmitting(true);
     try {
+      const sanitizedLineItems = lineItems.map(it => ({
+        ...it,
+        quantity: Number(it.quantity) || 1,
+        unitPrice: Number(it.unitPrice) || 0,
+        taxRate: Number(it.taxRate) || 0,
+        totalAmount: Number(it.totalAmount) || 0
+      }));
+
       const payload = {
         externalSystem,
         externalPoNumber: externalPoNumber.trim(),
@@ -480,7 +501,7 @@ export function ImportExternalOrderModal({
         erpVendorCode: erpVendorCode.trim() || undefined,
         saveAlias: Boolean(saveAlias && erpVendorCode.trim()),
         fileAssetId,
-        lineItems,
+        lineItems: sanitizedLineItems,
         deliveryTerms: {
           expectedDeliveryDate: expectedDeliveryDate || undefined,
           deliveryAddress: deliveryAddress.trim() || undefined,
@@ -970,11 +991,16 @@ export function ImportExternalOrderModal({
                                 </td>
                                 <td className="p-2">
                                   <input
-                                    type="number"
-                                    min="0.001"
-                                    step="any"
-                                    value={item.quantity}
-                                    onChange={(e) => handleUpdateItem(idx, 'quantity', parseFloat(e.target.value) || 0)}
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={item.quantity === '' ? '' : item.quantity}
+                                    placeholder="1"
+                                    onFocus={(e) => e.target.select()}
+                                    onChange={(e) => handleUpdateItem(idx, 'quantity', cleanNumberInput(e.target.value))}
+                                    onBlur={() => {
+                                      const num = parseFloat(String(item.quantity));
+                                      handleUpdateItem(idx, 'quantity', isNaN(num) || num <= 0 ? 1 : num);
+                                    }}
                                     className="w-full h-8 px-2 rounded-lg border border-slate-200 text-xs font-mono font-bold text-slate-900 outline-none focus:border-[#12335f]"
                                   />
                                 </td>
@@ -989,11 +1015,16 @@ export function ImportExternalOrderModal({
                                 </td>
                                 <td className="p-2">
                                   <input
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    value={item.unitPrice}
-                                    onChange={(e) => handleUpdateItem(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={item.unitPrice === '' ? '' : item.unitPrice}
+                                    placeholder="0.00"
+                                    onFocus={(e) => e.target.select()}
+                                    onChange={(e) => handleUpdateItem(idx, 'unitPrice', cleanNumberInput(e.target.value))}
+                                    onBlur={() => {
+                                      const num = parseFloat(String(item.unitPrice));
+                                      handleUpdateItem(idx, 'unitPrice', isNaN(num) || num < 0 ? 0 : num);
+                                    }}
                                     className="w-full h-8 px-2 rounded-lg border border-slate-200 text-xs font-mono font-bold text-slate-900 outline-none focus:border-[#12335f]"
                                   />
                                 </td>

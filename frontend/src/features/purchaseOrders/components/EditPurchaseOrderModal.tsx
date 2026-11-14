@@ -38,12 +38,25 @@ export interface EditableLineItem {
   id?: number;
   itemName: string;
   description?: string;
-  quantity: number;
+  quantity: number | string;
   unitOfMeasure: string;
-  unitPrice: number;
+  unitPrice: number | string;
   taxRate: number;
   totalAmount: number;
 }
+
+export const cleanNumberInput = (raw: string): string => {
+  if (!raw) return '';
+  let val = String(raw).replace(/[^0-9.]/g, '');
+  const parts = val.split('.');
+  if (parts.length > 2) {
+    val = parts[0] + '.' + parts.slice(1).join('');
+  }
+  if (/^0[0-9]/.test(val)) {
+    val = val.replace(/^0+/, '') || '0';
+  }
+  return val;
+};
 
 export interface EditPurchaseOrderModalProps {
   isOpen: boolean;
@@ -394,11 +407,13 @@ export function EditPurchaseOrderModal({
         setError(`Line Item #${i + 1} requires an item name.`);
         return;
       }
-      if (item.quantity <= 0) {
+      const qtyNum = Number(item.quantity);
+      if (isNaN(qtyNum) || qtyNum <= 0) {
         setError(`Line Item #${i + 1} ("${item.itemName}") quantity must be greater than zero.`);
         return;
       }
-      if (item.unitPrice < 0) {
+      const priceNum = Number(item.unitPrice);
+      if (isNaN(priceNum) || priceNum < 0) {
         setError(`Line Item #${i + 1} ("${item.itemName}") unit price cannot be negative.`);
         return;
       }
@@ -769,11 +784,16 @@ export function EditPurchaseOrderModal({
                       <div className="col-span-1 sm:col-span-2">
                         <label className="block text-[10px] font-bold text-slate-500 uppercase">Quantity *</label>
                         <input
-                          type="number"
-                          min="0.001"
-                          step="any"
-                          value={item.quantity}
-                          onChange={(e) => handleUpdateItem(idx, 'quantity', parseFloat(e.target.value) || 0)}
+                          type="text"
+                          inputMode="decimal"
+                          value={item.quantity === '' ? '' : item.quantity}
+                          placeholder="1"
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) => handleUpdateItem(idx, 'quantity', cleanNumberInput(e.target.value))}
+                          onBlur={() => {
+                            const num = parseFloat(String(item.quantity));
+                            handleUpdateItem(idx, 'quantity', isNaN(num) || num <= 0 ? 1 : num);
+                          }}
                           className="w-full rounded-lg border border-slate-300 px-2 py-1.5 font-mono font-bold text-slate-800 focus:border-[#12335f] focus:outline-none"
                           required
                         />
@@ -814,11 +834,16 @@ export function EditPurchaseOrderModal({
                       <div className="col-span-1 sm:col-span-3">
                         <label className="block text-[10px] font-bold text-slate-500 uppercase">Unit Price (₹) *</label>
                         <input
-                          type="number"
-                          min="0"
-                          step="any"
-                          value={item.unitPrice}
-                          onChange={(e) => handleUpdateItem(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
+                          type="text"
+                          inputMode="decimal"
+                          value={item.unitPrice === '' ? '' : item.unitPrice}
+                          placeholder="0.00"
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) => handleUpdateItem(idx, 'unitPrice', cleanNumberInput(e.target.value))}
+                          onBlur={() => {
+                            const num = parseFloat(String(item.unitPrice));
+                            handleUpdateItem(idx, 'unitPrice', isNaN(num) || num < 0 ? 0 : num);
+                          }}
                           className="w-full rounded-lg border border-slate-300 px-2 py-1.5 font-mono font-bold text-slate-800 focus:border-[#12335f] focus:outline-none"
                           required
                         />
@@ -856,9 +881,9 @@ export function EditPurchaseOrderModal({
 
                     <div className="flex flex-wrap items-center justify-between pt-1.5 border-t border-slate-100 text-[11px] gap-2">
                       <div className="flex items-center gap-2 text-slate-600 font-medium">
-                        <span>Subtotal: <strong className="font-mono text-slate-800">{formatCurrency(item.quantity * item.unitPrice)}</strong></span>
+                        <span>Subtotal: <strong className="font-mono text-slate-800">{formatCurrency((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0))}</strong></span>
                         <span className="text-slate-300">•</span>
-                        <span>GST ({item.taxRate}%): <strong className="font-mono text-slate-800">{formatCurrency(((item.quantity * item.unitPrice) * (Number(item.taxRate) || 0)) / 100)}</strong></span>
+                        <span>GST ({item.taxRate}%): <strong className="font-mono text-slate-800">{formatCurrency((((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)) * (Number(item.taxRate) || 0)) / 100)}</strong></span>
                       </div>
                       <span className="font-mono font-black text-indigo-700 bg-indigo-50/70 px-2 py-0.5 rounded">
                         Line Total (incl. GST): {formatCurrency(item.totalAmount)}
