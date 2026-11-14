@@ -340,29 +340,55 @@ export function EditPurchaseOrderModal({
       return;
     }
 
+    if (file.size > 4.5 * 1024 * 1024) {
+      setError('File size exceeds serverless upload limit (max 4.5MB). Please upload a compressed or smaller PDF.');
+      return;
+    }
+
     setError(null);
     setUploadingPdf(true);
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('category', 'purchase_order');
-    formData.append('entityType', 'purchase_order');
+
+    const makeFormData = () => {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('category', 'purchase_order');
+      fd.append('entityType', 'purchase_order');
+      if (order?.id) {
+        fd.append('entityId', String(order.id));
+      }
+      return fd;
+    };
 
     try {
       let res = await api.fetch('/api/files/upload', {
         method: 'POST',
-        body: formData,
+        body: makeFormData(),
       });
 
-      if (!res.ok) {
-        // Fallback to /api/upload
-        res = await api.fetch('/api/upload', {
+      let data = await res.json().catch(() => ({}));
+
+      if (!res.ok && res.status === 404) {
+        // Fallback to /api/upload only if endpoint route is missing
+        const fallbackRes = await api.fetch('/api/upload', {
           method: 'POST',
-          body: formData,
+          body: makeFormData(),
         });
+        if (fallbackRes.ok || fallbackRes.status !== 404) {
+          res = fallbackRes;
+          data = await fallbackRes.json().catch(() => ({}));
+        }
       }
 
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.message || data?.error || 'Upload failed');
+      if (!res.ok) {
+        const errorMsg =
+          data?.message ||
+          (typeof data?.error === 'string' ? data.error : data?.error?.message) ||
+          data?.detail ||
+          data?.data?.message ||
+          (res.status === 413 ? 'File size exceeds maximum upload limit (4.5MB).' : `Upload failed (HTTP ${res.status})`);
+        throw new Error(errorMsg);
+      }
+
       const payload = data?.data || data;
       const fileId = payload?.fileAsset?.id || payload?.fileAssetId || payload?.fileId || payload?.file?.id || payload?.id;
       if (!fileId) throw new Error('Server did not return a valid file asset ID');

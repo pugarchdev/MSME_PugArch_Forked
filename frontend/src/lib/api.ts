@@ -325,21 +325,21 @@ export const api = {
     api.fetch(endpoint, {
       ...options,
       method: 'POST',
-      body: JSON.stringify(body)
+      body: body instanceof FormData ? body : JSON.stringify(body)
     }),
 
   put: (endpoint: string, body: any, options: RequestInit = {}) =>
     api.fetch(endpoint, {
       ...options,
       method: 'PUT',
-      body: JSON.stringify(body)
+      body: body instanceof FormData ? body : JSON.stringify(body)
     }),
 
   patch: (endpoint: string, body: any, options: RequestInit = {}) =>
     api.fetch(endpoint, {
       ...options,
       method: 'PATCH',
-      body: JSON.stringify(body)
+      body: body instanceof FormData ? body : JSON.stringify(body)
     }),
 
   delete: (endpoint: string, options: RequestInit = {}) =>

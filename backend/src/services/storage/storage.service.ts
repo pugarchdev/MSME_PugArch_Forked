@@ -48,7 +48,7 @@ export type StorageProvider = {
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const allowedByExtension: Record<string, string[]> = {
-  '.pdf': ['application/pdf'],
+  '.pdf': ['application/pdf', 'application/x-pdf', 'application/octet-stream', 'binary/octet-stream'],
   '.jpg': ['image/jpeg'],
   '.jpeg': ['image/jpeg'],
   '.png': ['image/png'],
@@ -111,6 +111,16 @@ const extensionForMime = (mimeType: string) => {
 };
 
 const detectMagicMime = (buffer: Buffer, declaredMime?: string): string | null => {
+  let buf = buffer;
+  if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) {
+    buf = buf.subarray(3);
+  }
+  let start = 0;
+  while (start < Math.min(buf.length, 32) && (buf[start] === 0x20 || buf[start] === 0x0a || buf[start] === 0x0d || buf[start] === 0x09)) {
+    start++;
+  }
+  const slice = buf.subarray(start);
+  if (slice.subarray(0, 4).equals(Buffer.from([0x25, 0x50, 0x44, 0x46]))) return 'application/pdf';
   if (buffer.subarray(0, 4).equals(Buffer.from([0x25, 0x50, 0x44, 0x46]))) return 'application/pdf';
   if (buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) return 'image/jpeg';
   if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';

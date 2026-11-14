@@ -10,6 +10,9 @@ const blockedExtensions = new Set([
 
 const allowedMimeTypes = new Set([
   'application/pdf',
+  'application/x-pdf',
+  'application/octet-stream',
+  'binary/octet-stream',
   'image/jpeg',
   'image/png',
   'image/webp',
@@ -48,7 +51,9 @@ export const upload = multer({
     if (blockedExtensions.has(ext) || Boolean(originalName.toLowerCase().match(/\.(php|exe|sh|jsp|asp|bat)\./))) {
       return callback(new ApiError(400, 'File extension is blocked by security policy'));
     }
-    if (!allowedMimeTypes.has(file.mimetype)) {
+    const normalizedMime = (file.mimetype || '').toLowerCase();
+    const isDocOrPdf = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.csv'].includes(ext);
+    if (!allowedMimeTypes.has(normalizedMime) && !(normalizedMime === 'application/octet-stream' && isDocOrPdf)) {
       return callback(new ApiError(400, 'Unsupported file type'));
     }
     callback(null, true);
