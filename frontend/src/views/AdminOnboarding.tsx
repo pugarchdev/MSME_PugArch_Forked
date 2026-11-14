@@ -1773,8 +1773,8 @@ export default function AdminOnboarding() {
   useEffect(() => {
     if (pagedCurrentData.length === 0) return;
     const timer = setTimeout(() => {
-      pagedCurrentData.slice(0, pageSize).forEach(prefetchDetail);
-    }, 150);
+      pagedCurrentData.slice(0, Math.min(5, pageSize)).forEach(prefetchDetail);
+    }, 300);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, currentPage, pageSize, debouncedSearchTerm, statusFilter, progressFilter, sortBy, sellers, buyers]);

@@ -36,17 +36,37 @@ const getNormalizedPath = (req: Request): string => {
   return full.split('?')[0];
 };
 
+const extractCookieValue = (req: Request, name: string): string => {
+  const direct = (req as any).cookies?.[name];
+  if (direct) return String(direct);
+  const raw = req.headers.cookie || '';
+  const match = raw
+    .split(';')
+    .map(part => part.trim())
+    .find(part => part.startsWith(`${name}=`));
+  if (!match) return '';
+  try {
+    return decodeURIComponent(match.slice(name.length + 1));
+  } catch {
+    return match.slice(name.length + 1);
+  }
+};
+
 const extractUserOrToken = (req: Request): string | null => {
   if (req.user?.id) return String(req.user.id);
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.slice(7).trim();
-    if (token && token !== 'null' && token !== 'undefined') {
+    if (token && token !== 'null' && token !== 'undefined' && token !== 'cookie-session') {
       return `tok:${sha256(token).slice(0, 16)}`;
     }
   }
-  const cookieSession = (req as any).cookies?.['session_token'] || (req as any).cookies?.['auth_token'];
-  if (cookieSession) {
+  const cookieSession =
+    extractCookieValue(req, 'token') ||
+    extractCookieValue(req, 'refreshToken') ||
+    extractCookieValue(req, 'session_token') ||
+    extractCookieValue(req, 'auth_token');
+  if (cookieSession && cookieSession !== 'null' && cookieSession !== 'undefined') {
     return `sess:${sha256(cookieSession).slice(0, 16)}`;
   }
   return null;
@@ -88,7 +108,7 @@ const routeLimiter = (options: RateLimitOptions) => {
     const identifier = extractUserOrToken(req);
     const isAdminRoute = path.startsWith('/api/admin') || path.startsWith('/api/master-admin');
     const effectiveMax = (isAdminRoute || Boolean(identifier)) && options.name === 'api-general'
-      ? Math.max(options.max * 4, 1200)
+      ? Math.max(options.max * 4, isAdminRoute ? 2400 : 1200)
       : options.max;
 
     try {

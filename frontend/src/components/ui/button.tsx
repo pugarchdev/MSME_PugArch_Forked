@@ -136,9 +136,10 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
     const renderBusyContent = () => {
       if (loadingText !== undefined) {
+        const textHasSpinner = hasSpinnerChild(loadingText);
         return (
           <>
-            {showSpinner && (
+            {showSpinner && !textHasSpinner && (
               <Loader2 className="h-4 w-4 animate-spin text-current" forceGold={false} />
             )}
             <span className="sr-only">Processing, please wait...</span>
