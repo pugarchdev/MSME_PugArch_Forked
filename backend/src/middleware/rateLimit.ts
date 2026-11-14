@@ -69,6 +69,10 @@ const extractUserOrToken = (req: Request): string | null => {
   if (cookieSession && cookieSession !== 'null' && cookieSession !== 'undefined') {
     return `sess:${sha256(cookieSession).slice(0, 16)}`;
   }
+  const queryToken = typeof req.query?.token === 'string' ? req.query.token.trim() : typeof req.query?.accessToken === 'string' ? (req.query.accessToken as string).trim() : null;
+  if (queryToken && queryToken !== 'null' && queryToken !== 'undefined' && queryToken !== 'cookie-session') {
+    return `tok:${sha256(queryToken).slice(0, 16)}`;
+  }
   return null;
 };
 
@@ -103,8 +107,12 @@ const routeLimiter = (options: RateLimitOptions) => {
     if ((env.NODE_ENV === 'development' || env.NODE_ENV === 'test') && !process.env.ENABLE_DEV_RATE_LIMITING) {
       return next();
     }
-    const key = keyFor(req);
     const path = getNormalizedPath(req);
+    // SSE notification stream is a persistent long-lived connection and should not consume general API request limits
+    if (options.name === 'api-general' && (path.startsWith('/api/notifications/stream') || path.startsWith('/notifications/stream'))) {
+      return next();
+    }
+    const key = keyFor(req);
     const identifier = extractUserOrToken(req);
     const isAdminRoute = path.startsWith('/api/admin') || path.startsWith('/api/master-admin');
     const effectiveMax = (isAdminRoute || Boolean(identifier)) && options.name === 'api-general'

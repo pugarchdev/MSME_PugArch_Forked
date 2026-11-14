@@ -1431,6 +1431,7 @@ function ScopeListPanel({
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -1451,9 +1452,31 @@ function ScopeListPanel({
       : tab === 'products'
         ? `/api/admin/catalogue/products?${params.toString()}`
         : `/api/admin/catalogue/services?${params.toString()}`;
-    api.fetch(endpoint, { ...authHeaders })
+
+    const fetchOptions: RequestInit = {
+      method: 'GET',
+      credentials: 'include',
+      ...(authHeaders || {})
+    };
+
+    api.fetch(endpoint, fetchOptions)
       .then(async res => {
-        if (!res.ok) throw new Error('Failed to load list');
+        if (!res.ok) {
+          let errorMsg = 'Failed to load list';
+          try {
+            const errBody = await res.json();
+            if (errBody?.message) errorMsg = errBody.message;
+            else if (errBody?.error?.message) errorMsg = errBody.error.message;
+          } catch {
+            // body not json
+          }
+          if (res.status === 429) {
+            errorMsg = 'Request limit reached. Please wait a moment and click Retry.';
+          } else if (res.status === 401 || res.status === 403) {
+            errorMsg = 'Session expired or unauthorized to view list.';
+          }
+          throw new Error(errorMsg);
+        }
         const body = await res.json();
         const data = body?.data || body || {};
         const list = Array.isArray(data)
@@ -1470,17 +1493,20 @@ function ScopeListPanel({
                     ? data.items
                     : [];
         if (!cancelled) {
-          setItems(list.filter((i: any) => Number(i.organizationId ?? i.organization?.id) === Number(orgId)));
+          setItems(list.filter((i: any) => {
+            const itemOrgId = Number(i.organizationId ?? i.organization?.id ?? i.seller?.organizationId ?? i.buyer?.organizationId);
+            return itemOrgId === Number(orgId) || !itemOrgId;
+          }));
         }
       })
       .catch(err => {
-        if (!cancelled) setError(err?.message || 'Unable to load');
+        if (!cancelled) setError(err?.message || 'Unable to load list');
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [orgId, tab, count, authHeaders]);
+  }, [orgId, tab, count, authHeaders, reloadKey]);
 
   const columns = useMemo<ColumnDef<any>[]>(() => [
     {
@@ -1512,7 +1538,21 @@ function ScopeListPanel({
     }
   ], [tab]);
 
-  if (error) return <p className="text-center text-xs font-bold text-red-500 py-8">{error}</p>;
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 gap-3">
+        <p className="text-center text-xs font-bold text-red-500">{error}</p>
+        <button
+          type="button"
+          onClick={() => setReloadKey(k => k + 1)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded hover:bg-slate-50 transition shadow-sm"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
     <DataTable
