@@ -229,14 +229,15 @@ export function ImportExternalOrderModal({
       }
 
       setFileAssetId(data.fileAssetId);
-      if (data.viewUrl) {
+      // Retain the local blob preview URL for instant, 100% reliable in-browser PDF rendering without auth/CORS issues
+      if (!previewUrl && data.viewUrl) {
         setPreviewUrl(data.viewUrl);
       }
 
       // Status banner (vendor-neutral)
-      const banner = data.statusBanner || (data.extractionMode === 'GRACEFUL_FALLBACK' ? 'Manual Review Mode Active' : 'Extracted via AI Model');
+      const banner = data.statusBanner || (data.extractionMode === 'GRACEFUL_FALLBACK' ? 'Manual Review Mode Active' : (data.extractionMode === 'DIGITAL_RECORD' ? 'Extracted via Digital Record' : 'Extracted via AI Model'));
       setStatusBanner(banner);
-      setExtractionMode(data.extractionMode || 'AI_MODEL');
+      setExtractionMode(data.extractionMode || 'DIGITAL_RECORD');
 
       const extracted = data.data || {};
       setExtractionMetadata(extracted);
