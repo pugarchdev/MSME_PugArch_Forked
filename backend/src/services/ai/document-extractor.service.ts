@@ -269,6 +269,20 @@ function extractHeuristicsFromText(text: string): ExtractedDocumentData {
   const deliveryAddrMatch = text.match(/(?:Delivery\s*shall\s*be\s*on\s*F\.O\.R\.\s*Belpahar\s*basis\.\s*You\s*are\s*required\s*to\s*deliver\s*the\s*material\s*to\s*our\s*([A-Za-z0-9\s.,&'-]+?)\.)/i);
   const paymentTermMatch = text.match(/(?:TERMS\s*OF\s*PAYMENT|Payment\s*Term)[\s:-]*([A-Za-z0-9\s.,&'()-]+?)(?:\.\s*Delivery|Delivery\s*Terms|FOR\s*TRL)/i);
 
+  // Expected delivery date heuristics (e.g. DELIVERY SCHEDULE 31.03.2028 or Delivery Dt. 27.09.2027)
+  let expectedDeliveryDate: string | undefined = undefined;
+  const delivMatch = text.match(/(?:DELIVERY\s*SCHEDULE|Delivery\s*Dt\.?|valid\s*up\s*to|Validity\s*-\s*[0-9./-]+\s*to)[\s:]*([0-9]{2}[./-][0-9]{2}[./-][0-9]{4})/i) ||
+                     text.match(/([0-9]{2}[./-][0-9]{2}[./-][0-9]{4})\s+(?:Novalac|Liquid|Resin|SAC|CGST)/i);
+  if (delivMatch) {
+    const raw = delivMatch[1].replace(/[./]/g, '-');
+    const parts = raw.split('-');
+    if (parts[2].length === 4) {
+      expectedDeliveryDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    } else if (parts[0].length === 4) {
+      expectedDeliveryDate = raw;
+    }
+  }
+
   // Line items extraction
   const lineItems: ExtractedLineItem[] = [];
   const poLineMatch = text.match(/POS\s*No\.[\s\S]*?(?:10\s+([0-9]{4,10})\s+([0-9,]+(?:\.[0-9]+)?)\s+([A-Za-z]+)\s+([0-9,]+(?:\.[0-9]+)?)\s+([0-9,]+(?:\.[0-9]+)?)\s+([0-9./-]+)\s+([A-Za-z0-9\s().&'-]+?)(?:HSN|CGST|Specification))/i);
@@ -359,6 +373,7 @@ function extractHeuristicsFromText(text: string): ExtractedDocumentData {
       currency: 'INR'
     },
     deliveryTerms: {
+      expectedDeliveryDate,
       deliveryAddress: deliveryAddrMatch ? deliveryAddrMatch[1].trim() : undefined,
       paymentTerms: paymentTermMatch ? paymentTermMatch[1].trim() : undefined
     },

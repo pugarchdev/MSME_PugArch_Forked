@@ -74,6 +74,42 @@ async function resolveMsmeSeller(params: {
     }
   }
 
+  // 1b. Global Alias fallback (if user is admin or testing with a different buyerOrgId)
+  if (erpVendorCode) {
+    const globalAlias = await prisma.buyerVendorAlias.findFirst({
+      where: {
+        erpVendorCode: erpVendorCode.trim()
+      },
+      include: {
+        sellerOrg: {
+          include: {
+            users: {
+              where: { role: { in: ['seller', 'shg'] } },
+              take: 1
+            }
+          }
+        }
+      }
+    });
+
+    if (globalAlias && globalAlias.sellerOrg) {
+      const sellerUser = globalAlias.sellerOrg.users[0] || null;
+      return {
+        matched: true,
+        matchType: 'ALIAS_MAPPED',
+        organization: {
+          id: globalAlias.sellerOrg.id,
+          organizationName: globalAlias.sellerOrg.organizationName,
+          gstin: globalAlias.sellerOrg.gstin,
+          panNumber: globalAlias.sellerOrg.panNumber,
+          erpVendorCode: globalAlias.erpVendorCode
+        },
+        sellerUserId: sellerUser?.id || null,
+        sellerUser
+      };
+    }
+  }
+
   // 2. Match by GSTIN
   if (gstin && gstin.trim().length === 15) {
     const cleanGst = gstin.trim().toUpperCase();

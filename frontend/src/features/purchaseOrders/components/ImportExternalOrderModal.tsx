@@ -230,7 +230,7 @@ export function ImportExternalOrderModal({
 
       setFileAssetId(data.fileAssetId);
       // Retain the local blob preview URL for instant, 100% reliable in-browser PDF rendering without auth/CORS issues
-      if (!previewUrl && data.viewUrl) {
+      if (!selectedFile && data.viewUrl) {
         setPreviewUrl(data.viewUrl);
       }
 
@@ -577,6 +577,18 @@ export function ImportExternalOrderModal({
             </button>
           </div>
 
+          {/* Global Hidden File Input (Permanently mounted so Replace File and Dropzone always work reliably) */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,image/png,image/jpeg,image/webp"
+            className="hidden"
+            onChange={handleFileChange}
+            onClick={(e) => {
+              (e.target as HTMLInputElement).value = '';
+            }}
+          />
+
           {/* Body Content */}
           <div className="flex-1 overflow-hidden flex flex-col">
 
@@ -620,14 +632,6 @@ export function ImportExternalOrderModal({
                   >
                     Select Document from Computer
                   </Button>
-
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".pdf,image/png,image/jpeg,image/webp"
-                    className="hidden"
-                    onChange={handleFileChange}
-                  />
                 </div>
               </div>
             )}
@@ -704,11 +708,22 @@ export function ImportExternalOrderModal({
                           />
                         </div>
                       ) : (
-                        <iframe
-                          src={`${previewUrl}#toolbar=0&navpanes=0`}
-                          className="w-full h-full border-none"
-                          title="Original PDF Document"
-                        />
+                        <object
+                          data={`${previewUrl}#toolbar=1&navpanes=0`}
+                          type="application/pdf"
+                          className="w-full h-full"
+                        >
+                          <embed
+                            src={`${previewUrl}#toolbar=1&navpanes=0`}
+                            type="application/pdf"
+                            className="w-full h-full"
+                          />
+                          <iframe
+                            src={`${previewUrl}#toolbar=1&navpanes=0`}
+                            className="w-full h-full border-none"
+                            title="Original PDF Document"
+                          />
+                        </object>
                       )
                     ) : (
                       <span className="text-slate-500 text-xs">Preview unavailable</span>
