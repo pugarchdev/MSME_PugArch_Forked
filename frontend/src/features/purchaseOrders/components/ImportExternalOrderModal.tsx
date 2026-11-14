@@ -211,8 +211,14 @@ export function ImportExternalOrderModal({
       const formData = new FormData();
       formData.append('file', file);
 
-      const res = await api.post('/api/documents/extract', formData);
-      const json = await readJsonResponse(res);
+      const res = await api.fetch('/api/documents/extract', {
+        method: 'POST',
+        body: formData,
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json?.message || (typeof json?.error === 'string' ? json.error : json?.error?.message) || 'Failed to extract document contents');
+      }
       const data = json?.data || json;
 
       clearTimeout(t1);
