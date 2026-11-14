@@ -1,6 +1,18 @@
-
 steps:
-  # 1. Build Frontend Container Image
+  # 1. Build Backend Container Image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '$_AR_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/backend:$SHORT_SHA'
+      - '-t'
+      - '$_AR_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/backend:latest'
+      - '-f'
+      - 'Dockerfile.backend'
+      - '.'
+    id: 'build-backend'
+
+  # 2. Build Frontend Container Image
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
@@ -17,7 +29,20 @@ steps:
       - '.'
     id: 'build-frontend'
 
-  # 2. Push Frontend Images to Artifact Registry
+  # 3. Push Backend Images to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '$_AR_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/backend:$SHORT_SHA'
+    id: 'push-backend-sha'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '$_AR_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/backend:latest'
+    id: 'push-backend-latest'
+
+  # 4. Push Frontend Images to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
@@ -30,14 +55,30 @@ steps:
       - '$_AR_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/frontend:latest'
     id: 'push-frontend-latest'
 
-  # 3. Deploy Frontend to Cloud Run Singapore
+  # 5. Deploy Backend to Cloud Run Mumbai
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'msme-backend'
+      - '--image=$_AR_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/backend:latest'
+      - '--region=$_AR_LOCATION'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--port=8080'
+      - '--cpu=2'
+      - '--memory=2Gi'
+    id: 'deploy-backend'
+
+  # 6. Deploy Frontend to Cloud Run Singapore
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
       - 'run'
       - 'deploy'
       - 'jsgsmile-frontend'
-      - '--image=$_AR_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/frontend:$SHORT_SHA'
+      - '--image=$_AR_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/frontend:latest'
       - '--region=$_RUN_REGION'
       - '--platform=managed'
       - '--allow-unauthenticated'
